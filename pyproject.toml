@@ -72,6 +72,9 @@ appt-agent = "appt_agent.__main__:main"
 where = ["."]
 include = ["appt_agent*"]
 
+[tool.setuptools.package-data]
+"appt_agent.studio" = ["templates/*.html", "templates/**/*.html"]
+
 # ─── ruff ─────────────────────────────────────────────────────
 [tool.ruff]
 line-length = 100
