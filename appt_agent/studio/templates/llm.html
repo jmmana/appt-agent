@@ -144,15 +144,6 @@
           </p>
         </div>
 
-        <div>
-          <label class="label">Modelo</label>
-          <input x-model="form.model" type="text" class="input"
-                 placeholder="llama3.2 (nombre exacto en Open WebUI)" />
-          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
-            Usa el mismo nombre que aparece en Open WebUI. Ver lista en
-            <a href="https://ollama.com/library" target="_blank" style="color:#a78bfa">ollama.com/library</a>.
-          </p>
-        </div>
       </div>
 
       <!-- Bedrock -->
@@ -218,7 +209,7 @@ const PROVIDER_DEFAULTS = {
   cohere:    { model:'command-r-08-2024',                       keyLabel:'Cohere API Key',       hint:'Obtén en dashboard.cohere.com',    keyHint:'',                     baseUrl:'' },
   xai:       { model:'grok-2-1212',                             keyLabel:'xAI API Key',          hint:'Obtén en console.x.ai',            keyHint:'',                     baseUrl:'https://api.x.ai/v1' },
   ollama:    { model:'llama3.2',                                keyLabel:'',                     hint:'Modelos: ollama.com/library',      keyHint:'',                     baseUrl:'' },
-  openwebui: { model:'llama3.2',                                keyLabel:'API Key de Open WebUI', hint:'UI para Ollama en tu servidor',    keyHint:'Genera en: Configuración → Cuenta → API Keys', baseUrl:'' },
+  openwebui: { model:'llama3.2',                                keyLabel:'API Key de Open WebUI', hint:'Nombre exacto del modelo en Open WebUI — ver ollama.com/library',    keyHint:'Genera en: Configuración → Cuenta → API Keys', baseUrl:'' },
   bedrock:   { model:'us.anthropic.claude-3-5-sonnet-20241022-v2:0', keyLabel:'', hint:'',      keyHint:'',                             baseUrl:'' },
 };
 
