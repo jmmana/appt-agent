@@ -1,0 +1,105 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "appt-agent"
+version = "0.1.0"
+description = "Framework para crear agentes conversacionales de reserva de citas con soporte para múltiples calendarios y LLMs"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Juan Manuel Castillo Pinto", email = "jmmana@gmail.com" }]
+keywords = ["ai", "agent", "appointments", "booking", "calendar", "llm", "chatbot"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Communications :: Chat",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "httpx>=0.27",
+    "aiosqlite>=0.20",
+    "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.49"]
+openai    = ["openai>=1.50"]
+google    = [
+    "google-generativeai>=0.8",
+    "google-api-python-client>=2.150",
+    "google-auth-oauthlib>=1.2",
+    "google-auth-httplib2>=0.2",
+]
+outlook   = ["msal>=1.31"]
+mistral   = ["mistralai>=1.2"]
+cohere    = ["cohere>=5.11"]
+bedrock   = ["boto3>=1.35"]
+server    = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+dev       = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-mock>=3.14",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "httpx>=0.27",           # TestClient FastAPI
+    "respx>=0.21",           # Mock httpx
+    "coverage[toml]>=7.6",
+]
+all = [
+    "appt-agent[anthropic,openai,google,outlook,mistral,cohere,bedrock,server]",
+]
+
+[project.urls]
+Homepage    = "https://github.com/jmmana/appt-agent"
+Repository  = "https://github.com/jmmana/appt-agent"
+Issues      = "https://github.com/jmmana/appt-agent/issues"
+Changelog   = "https://github.com/jmmana/appt-agent/blob/main/CHANGELOG.md"
+
+[project.scripts]
+appt-agent = "appt_agent.__main__:main"
+
+# ─── setuptools ───────────────────────────────────────────────
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["appt_agent*"]
+
+# ─── ruff ─────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
+ignore  = ["ANN101", "ANN102", "ANN401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["appt_agent"]
+
+# ─── mypy ─────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+# ─── pytest ───────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths    = ["tests"]
+addopts      = "-v --tb=short"
+
+# ─── coverage ─────────────────────────────────────────────────
+[tool.coverage.run]
+source   = ["appt_agent"]
+omit     = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
