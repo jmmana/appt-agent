@@ -15,8 +15,10 @@ LABEL org.opencontainers.image.description="Conversational appointment booking a
 LABEL org.opencontainers.image.source="https://github.com/jmmana/appt-agent"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser
+# Install curl for healthcheck + create non-root user
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd -m -u 1000 appuser
 
 WORKDIR /app
 

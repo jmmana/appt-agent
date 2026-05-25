@@ -207,6 +207,12 @@ async def chat_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("chat.html", ctx)
 
 
+@router.get("/test", response_class=HTMLResponse)
+async def test_chat_page(request: Request) -> HTMLResponse:
+    """Standalone test chat — network picker + chat UI, no sidebar."""
+    return templates.TemplateResponse("test_chat.html", {"request": request})
+
+
 # ─── Logs ────────────────────────────────────────────────────────────────────
 
 @router.get("/studio/logs", response_class=HTMLResponse)
