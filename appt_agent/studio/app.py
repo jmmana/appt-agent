@@ -17,6 +17,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from appt_agent.models import ChatRequest, ChatResponse, TokenUsage
 from appt_agent.studio.config_store import ConfigStore
 from appt_agent.studio.routes import router as studio_router, _reload_agent
 from appt_agent.studio.routes_calendar import router as cal_router
@@ -73,9 +74,6 @@ def create_studio_app(
     )
 
     # Override /chat to use the live_agent from state (hot-reloadable)
-    from fastapi import Depends
-    from appt_agent.models import ChatRequest, ChatResponse
-
     @app.post("/chat", response_model=ChatResponse, tags=["Chat"])
     async def chat_dynamic(body: ChatRequest, request: Request) -> ChatResponse:
         agent = request.app.state.live_agent
@@ -91,8 +89,6 @@ def create_studio_app(
         )
 
     # Stats and conversation routes use live_agent too
-    from appt_agent.models import TokenUsage
-
     @app.get("/stats", tags=["Monitoring"])
     async def stats(request: Request) -> dict[str, Any]:
         agent = request.app.state.live_agent
