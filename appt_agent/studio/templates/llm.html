@@ -132,7 +132,7 @@
 
     <!-- ── Actions ───────────────────────────────────────────── -->
     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
-      <button type="button" @click="testConn()" :disabled="testing" class="btn-secondary">
+      <button type="button" @click="testConn()" :disabled="testing || loadingModels" class="btn-secondary">
         <span x-show="!testing">🔌 Probar conexión</span>
         <span x-show="testing" x-cloak>
           <svg style="animation:spin 1s linear infinite;width:0.875rem;height:0.875rem" fill="none" viewBox="0 0 24 24">
@@ -141,6 +141,13 @@
           </svg>
           Probando…
         </span>
+      </button>
+
+      <!-- Show models button — only for Ollama/OpenWebUI -->
+      <button type="button" x-show="form.provider === 'ollama' || form.provider === 'openwebui'"
+              @click="fetchModels()" :disabled="loadingModels || testing" class="btn-secondary" style="font-size:0.8rem">
+        <span x-show="!loadingModels">📋 Ver modelos</span>
+        <span x-show="loadingModels" x-cloak>Cargando…</span>
       </button>
 
       <button type="submit" :disabled="saving" class="btn-primary">
@@ -152,6 +159,21 @@
             style="font-size:0.8rem;color:#34d399;display:flex;align-items:center;gap:0.3rem">
         ✓ Configuración guardada
       </span>
+
+      <!-- Models list dropdown -->
+      <div x-show="modelsList.length > 0" x-cloak
+           style="width:100%;margin-top:0.5rem;background:#1e293b;border:1px solid #374151;border-radius:0.5rem;padding:0.75rem">
+        <p style="font-size:0.75rem;color:#9ca3af;margin:0 0 0.5rem">
+          Modelos disponibles — haz click para seleccionar:
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:0.375rem">
+          <template x-for="m in modelsList" :key="m">
+            <button type="button" @click="form.model = m; modelsList = []"
+                    style="background:#0f172a;border:1px solid #4b5563;color:#e2e8f0;padding:0.2rem 0.6rem;border-radius:0.375rem;font-size:0.75rem;cursor:pointer;font-family:monospace"
+                    x-text="m"></button>
+          </template>
+        </div>
+      </div>
 
       <span x-show="testResult && !saving" x-cloak
             :style="testOk ? 'color:#34d399' : 'color:#f87171'"
@@ -191,6 +213,7 @@ function llmConfig() {
       aws_region: 'us-east-1',
     },
     saving:false, saved:false, testing:false, testResult:'', testOk:false,
+    loadingModels:false, modelsList:[],
 
     get defaultModel()    { return PROVIDER_DEFAULTS[this.form.provider]?.model || ''; },
     get apiKeyLabel()     { return PROVIDER_DEFAULTS[this.form.provider]?.keyLabel || 'API Key'; },
@@ -244,6 +267,28 @@ function llmConfig() {
         this.testResult = '✗ ' + e.message;
       }
       this.testing = false;
+    },
+
+    async fetchModels() {
+      this.loadingModels = true; this.modelsList = []; this.testResult = '';
+      try {
+        const r = await fetch('/studio/llm/models', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ base_url: this.form.base_url, api_key: this.form.api_key }),
+        });
+        const d = await r.json();
+        if (d.ok && d.models?.length) {
+          this.modelsList = d.models;
+        } else {
+          this.testOk = false;
+          this.testResult = '✗ ' + (d.error || 'No se encontraron modelos');
+        }
+      } catch(e) {
+        this.testOk = false;
+        this.testResult = '✗ ' + e.message;
+      }
+      this.loadingModels = false;
     },
   }
 }

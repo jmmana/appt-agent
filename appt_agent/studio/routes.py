@@ -149,6 +149,60 @@ async def test_llm(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": error_msg})
 
 
+@router.post("/studio/llm/models")
+async def list_models(request: Request) -> JSONResponse:
+    """List models available on an Ollama / Open WebUI server."""
+    import httpx as _httpx
+    import re as _re
+    body     = await request.json()
+    base_url = (body.get("base_url", "") or "").strip()
+    api_key  = body.get("api_key", "") or ""
+
+    if not base_url:
+        return JSONResponse({"ok": False, "error": "base_url requerida"})
+
+    # Normalize double slashes and trailing slash
+    base_url = _re.sub(r'(?<!:)/{2,}', '/', base_url).rstrip("/")
+
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    # Try Open WebUI /api/models, then bare Ollama /api/tags
+    endpoints = [
+        (base_url + "/models",   "openwebui"),
+        (base_url + "/tags",     "ollama"),
+    ]
+    # If base_url doesn't end with /api, also try adding /api
+    if not base_url.rstrip("/").endswith("/api"):
+        endpoints = [
+            (base_url + "/api/models", "openwebui"),
+            (base_url + "/api/tags",   "ollama"),
+        ] + endpoints
+
+    async with _httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+        for url, kind in endpoints:
+            try:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    data = r.json()
+                    # Open WebUI returns {"data": [...]} ; Ollama returns {"models": [...]}
+                    if kind == "openwebui" and "data" in data:
+                        names = [m.get("id") or m.get("name") for m in data["data"]]
+                    elif kind == "ollama" and "models" in data:
+                        names = [m.get("name") for m in data["models"]]
+                    else:
+                        names = []
+                    names = [n for n in names if n]
+                    return JSONResponse({"ok": True, "models": sorted(names), "endpoint": url})
+                if r.status_code == 401:
+                    return JSONResponse({"ok": False, "error": "401 Unauthorized — verifica el API key"})
+            except Exception:
+                continue
+
+    return JSONResponse({"ok": False, "error": "No se pudo listar modelos — verifica la URL"})
+
+
 # ─── Business config ──────────────────────────────────────────────────────────
 
 @router.get("/studio/business", response_class=HTMLResponse)
