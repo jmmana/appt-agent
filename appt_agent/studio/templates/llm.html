@@ -4,164 +4,230 @@
 {% block page_subtitle %}Configura el proveedor y modelo de inteligencia artificial{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl" x-data="llmConfig()" x-init="init()">
-  <form @submit.prevent="save()" class="space-y-6">
+<div style="max-width:42rem" x-data="llmConfig()" x-init="init()">
+  <form @submit.prevent="save()" style="display:flex;flex-direction:column;gap:1.25rem">
 
-    <!-- Provider -->
-    <div class="card space-y-5">
-      <h2 class="text-sm font-semibold text-white">Proveedor</h2>
+    <!-- ── Proveedor ─────────────────────────────────────────── -->
+    <div class="card">
+      <p class="section-title">Proveedor</p>
 
-      <div>
-        <label class="label">Provider</label>
-        <select x-model="form.provider" @change="onProviderChange()" class="input">
-          <optgroup label="Sin costo (local)">
-            <option value="ollama">Ollama / Meta Llama (local)</option>
-          </optgroup>
-          <optgroup label="Bajo costo">
-            <option value="groq">Groq (Llama ultra-rápido)</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="cohere">Cohere</option>
-          </optgroup>
-          <optgroup label="Populares">
-            <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai">OpenAI (GPT)</option>
-            <option value="google">Google (Gemini)</option>
-            <option value="mistral">Mistral AI</option>
-            <option value="xai">xAI (Grok)</option>
-          </optgroup>
-          <optgroup label="Cloud">
-            <option value="bedrock">Amazon Bedrock</option>
-          </optgroup>
-        </select>
-      </div>
+      <div style="display:flex;flex-direction:column;gap:1.25rem">
 
-      <div>
-        <label class="label">
-          Modelo
-          <span class="text-gray-600 font-normal ml-1" x-text="modelHint"></span>
-        </label>
-        <input x-model="form.model" type="text" class="input"
-               :placeholder="defaultModel" />
-        <p class="text-xs text-gray-600 mt-1">Deja vacío para usar el modelo por defecto del provider.</p>
+        <!-- Provider select -->
+        <div>
+          <label class="label">Provider</label>
+          <select x-model="form.provider" @change="onProviderChange()" class="input">
+            <optgroup label="── Sin costo (local) ──────────">
+              <option value="ollama">Ollama / Meta Llama</option>
+            </optgroup>
+            <optgroup label="── Bajo costo ──────────────────">
+              <option value="groq">Groq (Llama ultra-rápido, gratis)</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="cohere">Cohere</option>
+            </optgroup>
+            <optgroup label="── Populares ───────────────────">
+              <option value="anthropic">Anthropic — Claude</option>
+              <option value="openai">OpenAI — GPT-4o</option>
+              <option value="google">Google — Gemini</option>
+              <option value="mistral">Mistral AI</option>
+              <option value="xai">xAI — Grok</option>
+            </optgroup>
+            <optgroup label="── Cloud ───────────────────────">
+              <option value="bedrock">Amazon Bedrock</option>
+            </optgroup>
+          </select>
+          <!-- Provider hint link -->
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem" x-show="modelHint" x-text="modelHint"></p>
+        </div>
+
+        <!-- Model -->
+        <div>
+          <label class="label">Modelo</label>
+          <input x-model="form.model" type="text" class="input"
+                 :placeholder="defaultModel || 'Dejar vacío = modelo por defecto'" />
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
+            Deja vacío para usar el modelo por defecto del proveedor.
+          </p>
+        </div>
       </div>
     </div>
 
-    <!-- Credentials -->
-    <div class="card space-y-5">
-      <h2 class="text-sm font-semibold text-white">Credenciales</h2>
+    <!-- ── Credenciales ──────────────────────────────────────── -->
+    <div class="card">
+      <p class="section-title">Credenciales</p>
 
       <!-- API Key (most providers) -->
-      <div x-show="form.provider !== 'ollama' && form.provider !== 'bedrock'">
-        <label class="label" x-text="apiKeyLabel"></label>
-        <input x-model="form.api_key" type="password" class="input"
-               placeholder="••••••••••••••••" autocomplete="off" />
-        <p class="text-xs text-gray-600 mt-1" x-text="apiKeyHint"></p>
+      <div x-show="form.provider !== 'ollama' && form.provider !== 'bedrock'" style="display:flex;flex-direction:column;gap:1rem">
+        <div>
+          <label class="label" x-text="apiKeyLabel || 'API Key'"></label>
+          <input x-model="form.api_key" type="password" class="input"
+                 placeholder="••••••••••••••••" autocomplete="off" />
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem" x-text="apiKeyHint"></p>
+        </div>
+        <!-- Hint for custom base URL -->
+        <div x-show="form.provider === 'deepseek' || form.provider === 'groq' || form.provider === 'xai'">
+          <label class="label">Base URL <span style="font-weight:400;text-transform:none;color:#4b5563">(opcional — auto-detectado)</span></label>
+          <input x-model="form.base_url" type="text" class="input"
+                 :placeholder="providerBaseUrl" />
+        </div>
       </div>
 
-      <!-- Ollama base URL + optional API key -->
-      <div x-show="form.provider === 'ollama'" class="space-y-3">
+      <!-- Ollama -->
+      <div x-show="form.provider === 'ollama'" style="display:flex;flex-direction:column;gap:1rem">
+
+        <!-- Info banner -->
+        <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:0.5rem;padding:0.875rem 1rem;font-size:0.8rem;color:#a5b4fc;display:flex;gap:0.625rem">
+          <span style="font-size:1rem;flex-shrink:0">ℹ️</span>
+          <span>
+            Ollama corre de forma <strong>gratuita</strong> en tu servidor.
+            Asegúrate de tener al menos un modelo descargado:
+            <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.35rem;border-radius:0.25rem">ollama pull llama3.2</code>
+          </span>
+        </div>
+
         <div>
-          <label class="label">Base URL de Ollama</label>
+          <label class="label">Base URL del servidor</label>
           <input x-model="form.base_url" type="text" class="input"
                  placeholder="http://localhost:11434" />
-          <p class="text-xs text-gray-600 mt-1">
-            URL de tu servidor Ollama — local o remoto (ej: <code class="text-gray-500">https://ollama.miservidor.com</code>).
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
+            URL donde corre Ollama — local o remoto
+            (ej: <span style="color:#6366f1">https://ollama.miservidor.com</span>).
           </p>
         </div>
+
         <div>
           <label class="label">
-            API Key de Ollama
-            <span class="text-gray-600 font-normal ml-1">(opcional)</span>
+            API Key
+            <span style="font-weight:400;text-transform:none;color:#4b5563;font-size:0.7rem">&nbsp;— solo si tu Ollama tiene auth</span>
           </label>
           <input x-model="form.api_key" type="password" class="input"
-                 placeholder="Solo si tu servidor usa OLLAMA_API_KEY" autocomplete="off" />
-          <p class="text-xs text-gray-600 mt-1">
-            Si tu Ollama tiene auth habilitada, pega aquí el token. Se envía como
-            <code class="text-gray-500">Authorization: Bearer &lt;token&gt;</code>.
+                 placeholder="Dejar vacío si no se requiere" autocomplete="off" />
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
+            Se envía como
+            <code style="background:#1e293b;padding:0.1rem 0.35rem;border-radius:0.25rem;font-size:0.7rem">Authorization: Bearer &lt;token&gt;</code>.
+            Verifica si tu Ollama requiere auth:
+            <code style="background:#1e293b;padding:0.1rem 0.35rem;border-radius:0.25rem;font-size:0.7rem">curl {{ '{{' }} base_url {{ '}}' }}/api/tags</code>
           </p>
         </div>
       </div>
 
       <!-- Bedrock -->
-      <div x-show="form.provider === 'bedrock'" class="space-y-3">
+      <div x-show="form.provider === 'bedrock'" style="display:flex;flex-direction:column;gap:1rem">
         <div>
           <label class="label">AWS Region</label>
           <input x-model="form.aws_region" type="text" class="input" placeholder="us-east-1" />
         </div>
-        <p class="text-xs text-gray-500">Las credenciales de AWS se leen de variables de entorno
-          <code class="bg-gray-800 px-1 rounded">AWS_ACCESS_KEY_ID</code> /
-          <code class="bg-gray-800 px-1 rounded">AWS_SECRET_ACCESS_KEY</code>
-          o del perfil ~/.aws/credentials.</p>
+        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:0.5rem;padding:0.875rem;font-size:0.8rem;color:#fbbf24">
+          Las credenciales AWS se leen de variables de entorno
+          <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">AWS_ACCESS_KEY_ID</code>
+          y
+          <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">AWS_SECRET_ACCESS_KEY</code>
+          o del perfil <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">~/.aws/credentials</code>.
+        </div>
       </div>
     </div>
 
-    <!-- Test + Save -->
-    <div class="flex items-center gap-3">
-      <button type="button" @click="testConn()" :disabled="testing"
-              class="btn-secondary">
+    <!-- ── Actions ───────────────────────────────────────────── -->
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+      <button type="button" @click="testConn()" :disabled="testing" class="btn-secondary">
         <span x-show="!testing">🔌 Probar conexión</span>
-        <span x-show="testing">Probando...</span>
+        <span x-show="testing" x-cloak>
+          <svg style="animation:spin 1s linear infinite;width:0.875rem;height:0.875rem" fill="none" viewBox="0 0 24 24">
+            <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          Probando…
+        </span>
       </button>
+
       <button type="submit" :disabled="saving" class="btn-primary">
         <span x-show="!saving">💾 Guardar</span>
-        <span x-show="saving">Guardando...</span>
+        <span x-show="saving" x-cloak>Guardando…</span>
       </button>
-      <span x-show="saved" x-cloak class="text-xs text-green-400">✓ Guardado</span>
-      <span x-show="testResult" x-cloak class="text-xs"
-            :class="testOk ? 'text-green-400' : 'text-red-400'"
-            x-text="testResult"></span>
+
+      <span x-show="saved" x-cloak
+            style="font-size:0.8rem;color:#34d399;display:flex;align-items:center;gap:0.3rem">
+        ✓ Configuración guardada
+      </span>
+
+      <span x-show="testResult && !saving" x-cloak
+            :style="testOk ? 'color:#34d399' : 'color:#f87171'"
+            style="font-size:0.8rem;display:flex;align-items:center;gap:0.3rem"
+            x-text="testResult">
+      </span>
     </div>
   </form>
 </div>
 
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
 <script>
 const PROVIDER_DEFAULTS = {
-  anthropic: { model: 'claude-sonnet-4-6',         keyLabel: 'Anthropic API Key',    hint: 'console.anthropic.com', keyHint: 'Empieza con sk-ant-...' },
-  openai:    { model: 'gpt-4o-mini',               keyLabel: 'OpenAI API Key',       hint: 'platform.openai.com',   keyHint: 'Empieza con sk-...' },
-  google:    { model: 'gemini-2.0-flash',           keyLabel: 'Google AI API Key',    hint: 'aistudio.google.com',   keyHint: 'Empieza con AIza...' },
-  deepseek:  { model: 'deepseek-chat',              keyLabel: 'DeepSeek API Key',     hint: 'platform.deepseek.com', keyHint: '' },
-  groq:      { model: 'llama-3.3-70b-versatile',   keyLabel: 'Groq API Key',         hint: 'console.groq.com',      keyHint: 'Empieza con gsk_...' },
-  mistral:   { model: 'mistral-small-latest',       keyLabel: 'Mistral API Key',      hint: 'console.mistral.ai',    keyHint: '' },
-  cohere:    { model: 'command-r-08-2024',          keyLabel: 'Cohere API Key',       hint: 'dashboard.cohere.com',  keyHint: '' },
-  xai:       { model: 'grok-2-1212',               keyLabel: 'xAI API Key',          hint: 'console.x.ai',          keyHint: '' },
-  ollama:    { model: 'llama3.2',                   keyLabel: '',                     hint: 'ollama.com/library',    keyHint: '' },
-  bedrock:   { model: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', keyLabel: '', hint: '', keyHint: '' },
+  anthropic: { model:'claude-sonnet-4-6',                       keyLabel:'Anthropic API Key',    hint:'Obtén en console.anthropic.com',   keyHint:'Empieza con sk-ant-…', baseUrl:'' },
+  openai:    { model:'gpt-4o-mini',                             keyLabel:'OpenAI API Key',       hint:'Obtén en platform.openai.com',     keyHint:'Empieza con sk-…',     baseUrl:'' },
+  google:    { model:'gemini-2.0-flash',                        keyLabel:'Google AI API Key',    hint:'Obtén en aistudio.google.com',     keyHint:'Empieza con AIza…',    baseUrl:'' },
+  deepseek:  { model:'deepseek-chat',                           keyLabel:'DeepSeek API Key',     hint:'Obtén en platform.deepseek.com',   keyHint:'',                     baseUrl:'https://api.deepseek.com' },
+  groq:      { model:'llama-3.3-70b-versatile',                 keyLabel:'Groq API Key (gratis)',hint:'Obtén en console.groq.com',       keyHint:'Empieza con gsk_…',    baseUrl:'https://api.groq.com/openai/v1' },
+  mistral:   { model:'mistral-small-latest',                    keyLabel:'Mistral API Key',      hint:'Obtén en console.mistral.ai',      keyHint:'',                     baseUrl:'' },
+  cohere:    { model:'command-r-08-2024',                       keyLabel:'Cohere API Key',       hint:'Obtén en dashboard.cohere.com',    keyHint:'',                     baseUrl:'' },
+  xai:       { model:'grok-2-1212',                             keyLabel:'xAI API Key',          hint:'Obtén en console.x.ai',            keyHint:'',                     baseUrl:'https://api.x.ai/v1' },
+  ollama:    { model:'llama3.2',                                keyLabel:'',                     hint:'Modelos: ollama.com/library',      keyHint:'',                     baseUrl:'' },
+  bedrock:   { model:'us.anthropic.claude-3-5-sonnet-20241022-v2:0', keyLabel:'', hint:'',      keyHint:'',                             baseUrl:'' },
 };
 
 function llmConfig() {
   return {
-    form: { provider: '{{ config.llm.provider }}', model: '{{ config.llm.model }}',
-            api_key: '', base_url: '{{ config.llm.base_url or "" }}', aws_region: 'us-east-1' },
-    saving: false, saved: false, testing: false, testResult: '', testOk: false,
-    get defaultModel() { return PROVIDER_DEFAULTS[this.form.provider]?.model || ''; },
-    get apiKeyLabel()  { return PROVIDER_DEFAULTS[this.form.provider]?.keyLabel || 'API Key'; },
-    get apiKeyHint()   { return PROVIDER_DEFAULTS[this.form.provider]?.keyHint || ''; },
-    get modelHint()    { return PROVIDER_DEFAULTS[this.form.provider]?.hint ? '— ' + PROVIDER_DEFAULTS[this.form.provider].hint : ''; },
+    form: {
+      provider: '{{ config.llm.provider or "anthropic" }}',
+      model:    '{{ config.llm.model or "" }}',
+      api_key:  '',
+      base_url: '{{ config.llm.base_url or "" }}',
+      aws_region: 'us-east-1',
+    },
+    saving:false, saved:false, testing:false, testResult:'', testOk:false,
+
+    get defaultModel()    { return PROVIDER_DEFAULTS[this.form.provider]?.model || ''; },
+    get apiKeyLabel()     { return PROVIDER_DEFAULTS[this.form.provider]?.keyLabel || 'API Key'; },
+    get apiKeyHint()      { return PROVIDER_DEFAULTS[this.form.provider]?.keyHint || ''; },
+    get modelHint()       { const h=PROVIDER_DEFAULTS[this.form.provider]?.hint; return h ? '↗ ' + h : ''; },
+    get providerBaseUrl() { return PROVIDER_DEFAULTS[this.form.provider]?.baseUrl || ''; },
+
     init() {},
+
     onProviderChange() {
       const def = PROVIDER_DEFAULTS[this.form.provider];
-      if (def && !this.form.model) this.form.model = def.model;
+      if (!this.form.model) this.form.model = '';
+      if (def?.baseUrl && !this.form.base_url) this.form.base_url = def.baseUrl;
     },
+
     async save() {
       this.saving = true; this.saved = false;
       const body = new FormData();
-      Object.entries(this.form).forEach(([k, v]) => body.append(k, v));
-      await fetch('/studio/llm', { method: 'POST', body });
+      Object.entries(this.form).forEach(([k,v]) => body.append(k, v));
+      await fetch('/studio/llm', { method:'POST', body });
       this.saving = false; this.saved = true;
-      setTimeout(() => this.saved = false, 3000);
+      setTimeout(() => this.saved = false, 4000);
     },
+
     async testConn() {
       this.testing = true; this.testResult = '';
       try {
         const r = await fetch('/studio/llm/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify(this.form),
         });
         const d = await r.json();
-        this.testOk = d.ok;
-        this.testResult = d.ok ? '✓ Conexión exitosa: ' + d.model : '✗ ' + d.error;
-      } catch(e) { this.testOk = false; this.testResult = '✗ ' + e.message; }
+        this.testOk    = d.ok;
+        this.testResult = d.ok
+          ? '✓ Conexión exitosa · ' + d.model
+          : '✗ ' + (typeof d.error === 'string' ? d.error : JSON.stringify(d.error));
+      } catch(e) {
+        this.testOk = false;
+        this.testResult = '✗ ' + e.message;
+      }
       this.testing = false;
     },
   }
