@@ -100,7 +100,11 @@ def _make_provider_class(
 
 
 # Register all OpenAI-compatible providers
-OpenAILLM   = _make_provider_class("openai",   "gpt-4o-mini")
-DeepSeekLLM = _make_provider_class("deepseek", "deepseek-chat",       "https://api.deepseek.com")
-XaiLLM      = _make_provider_class("xai",      "grok-2-1212",         "https://api.x.ai/v1")
-GroqLLM     = _make_provider_class("groq",     "llama-3.3-70b-versatile", "https://api.groq.com/openai/v1")
+OpenAILLM      = _make_provider_class("openai",     "gpt-4o-mini")
+DeepSeekLLM    = _make_provider_class("deepseek",   "deepseek-chat",                 "https://api.deepseek.com")
+XaiLLM         = _make_provider_class("xai",        "grok-2-1212",                   "https://api.x.ai/v1")
+GroqLLM        = _make_provider_class("groq",       "llama-3.3-70b-versatile",       "https://api.groq.com/openai/v1")
+# Open WebUI — self-hosted UI for Ollama/other models. API is at <host>/api
+# base_url must be set to https://<your-openwebui-host>/api
+# api_key must be a token generated in Open WebUI → Settings → Account → API Keys
+OpenWebUILLM   = _make_provider_class("openwebui",  "llama3.2")
