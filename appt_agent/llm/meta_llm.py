@@ -39,7 +39,9 @@ class OllamaLLM(AbstractLLM):
         import httpx
 
         self.model     = model
-        self._base_url = base_url.rstrip("/")
+        # Strip ALL whitespace (spaces, tabs, newlines) — common paste mistake
+        clean_url      = base_url.strip().rstrip("/")
+        self._base_url = clean_url + "/"  # trailing / so httpx joins paths correctly
         headers: dict[str, str] = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -73,7 +75,8 @@ class OllamaLLM(AbstractLLM):
             "temperature": temperature,
             "max_tokens":  max_tokens,
         }
-        resp = await self._client.post("/v1/chat/completions", json=payload)
+        # Relative path (no leading /) so httpx appends to base_url path correctly
+        resp = await self._client.post("v1/chat/completions", json=payload)
         resp.raise_for_status()
         data = resp.json()
 
