@@ -208,9 +208,12 @@ async def chat_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/test", response_class=HTMLResponse)
-async def test_chat_page(request: Request) -> HTMLResponse:
-    """Standalone test chat — network picker + chat UI, no sidebar."""
-    return templates.TemplateResponse("test_chat.html", {"request": request})
+async def test_chat_page() -> HTMLResponse:
+    """Standalone test chat — network picker + chat UI, no sidebar.
+    Served as raw HTML (no Jinja2 processing needed — no template variables).
+    """
+    html_path = _TEMPLATES_DIR / "test_chat.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
 # ─── Logs ────────────────────────────────────────────────────────────────────
