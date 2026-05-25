@@ -7,54 +7,40 @@
 <div style="max-width:42rem" x-data="llmConfig()" x-init="init()">
   <form @submit.prevent="save()" style="display:flex;flex-direction:column;gap:1.25rem">
 
-    <!-- ── Proveedor ─────────────────────────────────────────── -->
+    <!-- ── PASO 1: Proveedor ────────────────────────────────────── -->
     <div class="card">
-      <p class="section-title">Proveedor</p>
-
-      <div style="display:flex;flex-direction:column;gap:1.25rem">
-
-        <!-- Provider select -->
-        <div>
-          <label class="label">Provider</label>
-          <select x-model="form.provider" @change="onProviderChange()" class="input">
-            <optgroup label="── Sin costo / local ──────────">
-              <option value="ollama">Ollama / Open WebUI (servidor propio)</option>
-            </optgroup>
-            <optgroup label="── Bajo costo ──────────────────">
-              <option value="groq">Groq (Llama ultra-rápido, gratis)</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="cohere">Cohere</option>
-            </optgroup>
-            <optgroup label="── Populares ───────────────────">
-              <option value="anthropic">Anthropic — Claude</option>
-              <option value="openai">OpenAI — GPT-4o</option>
-              <option value="google">Google — Gemini</option>
-              <option value="mistral">Mistral AI</option>
-              <option value="xai">xAI — Grok</option>
-            </optgroup>
-            <optgroup label="── Cloud ───────────────────────">
-              <option value="bedrock">Amazon Bedrock</option>
-            </optgroup>
-          </select>
-          <!-- Provider hint link -->
-          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem" x-show="modelHint" x-text="modelHint"></p>
-        </div>
-
-        <!-- Model -->
-        <div>
-          <label class="label">Modelo</label>
-          <input x-model="form.model" type="text" class="input"
-                 :placeholder="defaultModel || 'Dejar vacío = modelo por defecto'" />
-          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
-            Deja vacío para usar el modelo por defecto del proveedor.
-          </p>
-        </div>
-      </div>
+      <p class="section-title" style="display:flex;align-items:center;gap:0.5rem">
+        <span style="background:#6366f1;color:#fff;border-radius:50%;width:1.25rem;height:1.25rem;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0">1</span>
+        Proveedor
+      </p>
+      <select x-model="form.provider" @change="onProviderChange()" class="input">
+        <optgroup label="── Sin costo / local ──────────">
+          <option value="ollama">Ollama / Open WebUI (servidor propio)</option>
+        </optgroup>
+        <optgroup label="── Bajo costo ──────────────────">
+          <option value="groq">Groq (Llama ultra-rápido, gratis)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="cohere">Cohere</option>
+        </optgroup>
+        <optgroup label="── Populares ───────────────────">
+          <option value="anthropic">Anthropic — Claude</option>
+          <option value="openai">OpenAI — GPT-4o</option>
+          <option value="google">Google — Gemini</option>
+          <option value="mistral">Mistral AI</option>
+          <option value="xai">xAI — Grok</option>
+        </optgroup>
+        <optgroup label="── Cloud ───────────────────────">
+          <option value="bedrock">Amazon Bedrock</option>
+        </optgroup>
+      </select>
     </div>
 
-    <!-- ── Credenciales ──────────────────────────────────────── -->
+    <!-- ── PASO 2: Credenciales ─────────────────────────────────── -->
     <div class="card">
-      <p class="section-title">Credenciales</p>
+      <p class="section-title" style="display:flex;align-items:center;gap:0.5rem">
+        <span style="background:#6366f1;color:#fff;border-radius:50%;width:1.25rem;height:1.25rem;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0">2</span>
+        Credenciales
+      </p>
 
       <!-- API Key (most providers) -->
       <div x-show="form.provider !== 'ollama' && form.provider !== 'bedrock' && form.provider !== 'openwebui'" style="display:flex;flex-direction:column;gap:1rem">
@@ -64,54 +50,35 @@
                  placeholder="••••••••••••••••" autocomplete="off" />
           <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem" x-text="apiKeyHint"></p>
         </div>
-        <!-- Hint for custom base URL -->
         <div x-show="form.provider === 'deepseek' || form.provider === 'groq' || form.provider === 'xai'">
-          <label class="label">Base URL <span style="font-weight:400;text-transform:none;color:#4b5563">(opcional — auto-detectado)</span></label>
-          <input x-model="form.base_url" type="text" class="input"
-                 :placeholder="providerBaseUrl" />
+          <label class="label">Base URL <span style="font-weight:400;text-transform:none;color:#4b5563">(opcional)</span></label>
+          <input x-model="form.base_url" type="text" class="input" :placeholder="providerBaseUrl" />
         </div>
       </div>
 
-      <!-- Ollama / Open WebUI (merged) -->
+      <!-- Ollama / Open WebUI -->
       <div x-show="form.provider === 'ollama' || form.provider === 'openwebui'" style="display:flex;flex-direction:column;gap:1rem">
-
-        <!-- Info banner -->
-        <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:0.5rem;padding:0.875rem 1rem;font-size:0.8rem;color:#a5b4fc">
-          <p style="margin:0 0 0.5rem;font-weight:700">Ollama &amp; Open WebUI — gratuito, sin costo por llamada</p>
-          <p style="margin:0;line-height:1.7">
-            • <strong>Ollama puro</strong>: URL = <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem">http://localhost:11434</code> — sin API key<br>
-            • <strong>Open WebUI</strong>: URL = tu dominio + <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem">/api</code>
-              (ej: <span style="color:#a5b4fc">https://ollama.warlockcode.com/api</span>) + API key de Open WebUI
-          </p>
-          <p style="margin:0.5rem 0 0;color:#6366f1;font-size:0.75rem">
-            El endpoint se detecta automáticamente — no necesitas elegir entre Ollama y Open WebUI.
-          </p>
+        <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:0.5rem;padding:0.875rem 1rem;font-size:0.8rem;color:#a5b4fc;line-height:1.7">
+          <strong>Ollama puro:</strong> URL = <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem">http://localhost:11434</code> — sin API key<br>
+          <strong>Open WebUI:</strong> URL = dominio + <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem">/api</code>
+          (ej: <span style="color:#a5b4fc">https://ollama.warlockcode.com/api</span>) + API key
         </div>
-
         <div>
-          <label class="label">Base URL del servidor</label>
+          <label class="label">URL base del servidor</label>
           <input x-model="form.base_url" type="text" class="input"
-                 placeholder="http://localhost:11434  ó  https://ollama.miservidor.com/api" />
-          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
-            Ollama puro: <code style="color:#6366f1">http://localhost:11434</code> &nbsp;·&nbsp;
-            Open WebUI: tu dominio + <code style="color:#a78bfa">/api</code>
-            (ej: <span style="color:#a78bfa">https://ollama.warlockcode.com/api</span>)
-          </p>
+                 placeholder="http://localhost:11434  ó  https://tu-openwebui.com/api" />
         </div>
-
         <div>
           <label class="label">
             API Key
-            <span style="font-weight:400;text-transform:none;color:#4b5563;font-size:0.7rem">&nbsp;— solo si tu servidor tiene auth (Open WebUI siempre requiere)</span>
+            <span style="font-weight:400;text-transform:none;color:#4b5563;font-size:0.7rem">&nbsp;— solo si tiene auth (Open WebUI siempre requiere)</span>
           </label>
           <input x-model="form.api_key" type="password" class="input"
                  placeholder="Vacío para Ollama local · sk-… para Open WebUI" autocomplete="off" />
-          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem;line-height:1.6">
-            Open WebUI: obtén el key en
-            <span style="color:#c4b5fd">usuario ↗ Configuración → Cuenta → API Keys → Crear</span>
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
+            Open WebUI: <span style="color:#c4b5fd">usuario ↗ Configuración → Cuenta → API Keys → Crear nuevo key</span>
           </p>
         </div>
-
       </div>
 
       <!-- Bedrock -->
@@ -121,66 +88,100 @@
           <input x-model="form.aws_region" type="text" class="input" placeholder="us-east-1" />
         </div>
         <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:0.5rem;padding:0.875rem;font-size:0.8rem;color:#fbbf24">
-          Las credenciales AWS se leen de variables de entorno
-          <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">AWS_ACCESS_KEY_ID</code>
-          y
+          Credenciales AWS desde variables de entorno
+          <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">AWS_ACCESS_KEY_ID</code> /
           <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">AWS_SECRET_ACCESS_KEY</code>
-          o del perfil <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">~/.aws/credentials</code>.
+          o <code style="background:rgba(245,158,11,0.15);padding:0.1rem 0.3rem;border-radius:0.25rem">~/.aws/credentials</code>.
         </div>
       </div>
     </div>
 
-    <!-- ── Actions ───────────────────────────────────────────── -->
-    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
-      <button type="button" @click="testConn()" :disabled="testing || loadingModels" class="btn-secondary">
-        <span x-show="!testing">🔌 Probar conexión</span>
-        <span x-show="testing" x-cloak>
-          <svg style="animation:spin 1s linear infinite;width:0.875rem;height:0.875rem" fill="none" viewBox="0 0 24 24">
-            <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
-          Probando…
+    <!-- ── PASO 3: Modelo ────────────────────────────────────────── -->
+    <div class="card">
+      <p class="section-title" style="display:flex;align-items:center;gap:0.5rem">
+        <span style="background:#6366f1;color:#fff;border-radius:50%;width:1.25rem;height:1.25rem;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0">3</span>
+        Modelo
+      </p>
+
+      <!-- Ollama/OpenWebUI: load from server -->
+      <div x-show="form.provider === 'ollama' || form.provider === 'openwebui'" style="display:flex;flex-direction:column;gap:0.75rem">
+
+        <!-- Load button -->
+        <button type="button" @click="fetchModels()"
+                :disabled="loadingModels || !form.base_url"
+                style="display:flex;align-items:center;gap:0.5rem;align-self:flex-start"
+                class="btn-secondary">
+          <span x-show="!loadingModels">📋 Cargar modelos del servidor</span>
+          <span x-show="loadingModels" x-cloak style="display:flex;align-items:center;gap:0.4rem">
+            <svg style="animation:spin 1s linear infinite;width:0.875rem;height:0.875rem" fill="none" viewBox="0 0 24 24">
+              <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            Cargando…
+          </span>
+        </button>
+
+        <!-- Model selector (after load) -->
+        <div x-show="modelsList.length > 0" x-cloak>
+          <label class="label">Selecciona el modelo</label>
+          <select x-model="form.model" class="input">
+            <option value="">— elige un modelo —</option>
+            <template x-for="m in modelsList" :key="m">
+              <option :value="m" x-text="m"></option>
+            </template>
+          </select>
+        </div>
+
+        <!-- Or type manually -->
+        <div>
+          <label class="label" style="font-size:0.7rem;color:#4b5563;text-transform:none;font-weight:400;letter-spacing:0">
+            O escribe el nombre manualmente:
+          </label>
+          <input x-model="form.model" type="text" class="input"
+                 placeholder="ej: llama3.2  /  qwen2.5-coder:latest" />
+        </div>
+      </div>
+
+      <!-- Other providers: plain text -->
+      <div x-show="form.provider !== 'ollama' && form.provider !== 'openwebui'" >
+        <input x-model="form.model" type="text" class="input"
+               :placeholder="defaultModel || 'Dejar vacío = modelo por defecto'" />
+        <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem" x-show="modelHint" x-text="modelHint"></p>
+      </div>
+    </div>
+
+    <!-- ── PASO 4: Validar y guardar ─────────────────────────────── -->
+    <div class="card">
+      <p class="section-title" style="display:flex;align-items:center;gap:0.5rem">
+        <span style="background:#6366f1;color:#fff;border-radius:50%;width:1.25rem;height:1.25rem;display:inline-flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;flex-shrink:0">4</span>
+        Validar y guardar
+      </p>
+      <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+        <button type="button" @click="testConn()" :disabled="testing || loadingModels" class="btn-secondary">
+          <span x-show="!testing">🔌 Probar conexión</span>
+          <span x-show="testing" x-cloak style="display:flex;align-items:center;gap:0.4rem">
+            <svg style="animation:spin 1s linear infinite;width:0.875rem;height:0.875rem" fill="none" viewBox="0 0 24 24">
+              <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path style="opacity:.75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            Probando…
+          </span>
+        </button>
+
+        <button type="submit" :disabled="saving" class="btn-primary">
+          <span x-show="!saving">💾 Guardar</span>
+          <span x-show="saving" x-cloak>Guardando…</span>
+        </button>
+
+        <span x-show="saved" x-cloak style="font-size:0.8rem;color:#34d399">✓ Guardado</span>
+
+        <span x-show="testResult && !saving" x-cloak
+              :style="testOk ? 'color:#34d399' : 'color:#f87171'"
+              style="font-size:0.8rem" x-text="testResult">
         </span>
-      </button>
-
-      <!-- Show models button — only for Ollama/OpenWebUI -->
-      <button type="button" x-show="form.provider === 'ollama' || form.provider === 'openwebui'"
-              @click="fetchModels()" :disabled="loadingModels || testing" class="btn-secondary" style="font-size:0.8rem">
-        <span x-show="!loadingModels">📋 Ver modelos</span>
-        <span x-show="loadingModels" x-cloak>Cargando…</span>
-      </button>
-
-      <button type="submit" :disabled="saving" class="btn-primary">
-        <span x-show="!saving">💾 Guardar</span>
-        <span x-show="saving" x-cloak>Guardando…</span>
-      </button>
-
-      <span x-show="saved" x-cloak
-            style="font-size:0.8rem;color:#34d399;display:flex;align-items:center;gap:0.3rem">
-        ✓ Configuración guardada
-      </span>
-
-      <!-- Models list dropdown -->
-      <div x-show="modelsList.length > 0" x-cloak
-           style="width:100%;margin-top:0.5rem;background:#1e293b;border:1px solid #374151;border-radius:0.5rem;padding:0.75rem">
-        <p style="font-size:0.75rem;color:#9ca3af;margin:0 0 0.5rem">
-          Modelos disponibles — haz click para seleccionar:
-        </p>
-        <div style="display:flex;flex-wrap:wrap;gap:0.375rem">
-          <template x-for="m in modelsList" :key="m">
-            <button type="button" @click="form.model = m; modelsList = []"
-                    style="background:#0f172a;border:1px solid #4b5563;color:#e2e8f0;padding:0.2rem 0.6rem;border-radius:0.375rem;font-size:0.75rem;cursor:pointer;font-family:monospace"
-                    x-text="m"></button>
-          </template>
-        </div>
       </div>
-
-      <span x-show="testResult && !saving" x-cloak
-            :style="testOk ? 'color:#34d399' : 'color:#f87171'"
-            style="font-size:0.8rem;display:flex;align-items:center;gap:0.3rem"
-            x-text="testResult">
-      </span>
     </div>
+
   </form>
 </div>
 
@@ -190,26 +191,26 @@
 
 <script>
 const PROVIDER_DEFAULTS = {
-  anthropic: { model:'claude-sonnet-4-6',                       keyLabel:'Anthropic API Key',    hint:'Obtén en console.anthropic.com',   keyHint:'Empieza con sk-ant-…', baseUrl:'' },
-  openai:    { model:'gpt-4o-mini',                             keyLabel:'OpenAI API Key',       hint:'Obtén en platform.openai.com',     keyHint:'Empieza con sk-…',     baseUrl:'' },
-  google:    { model:'gemini-2.0-flash',                        keyLabel:'Google AI API Key',    hint:'Obtén en aistudio.google.com',     keyHint:'Empieza con AIza…',    baseUrl:'' },
-  deepseek:  { model:'deepseek-chat',                           keyLabel:'DeepSeek API Key',     hint:'Obtén en platform.deepseek.com',   keyHint:'',                     baseUrl:'https://api.deepseek.com' },
-  groq:      { model:'llama-3.3-70b-versatile',                 keyLabel:'Groq API Key (gratis)',hint:'Obtén en console.groq.com',       keyHint:'Empieza con gsk_…',    baseUrl:'https://api.groq.com/openai/v1' },
-  mistral:   { model:'mistral-small-latest',                    keyLabel:'Mistral API Key',      hint:'Obtén en console.mistral.ai',      keyHint:'',                     baseUrl:'' },
-  cohere:    { model:'command-r-08-2024',                       keyLabel:'Cohere API Key',       hint:'Obtén en dashboard.cohere.com',    keyHint:'',                     baseUrl:'' },
-  xai:       { model:'grok-2-1212',                             keyLabel:'xAI API Key',          hint:'Obtén en console.x.ai',            keyHint:'',                     baseUrl:'https://api.x.ai/v1' },
-  ollama:    { model:'llama3.2',                                keyLabel:'',                     hint:'Modelos: ollama.com/library',      keyHint:'',                     baseUrl:'' },
-  openwebui: { model:'llama3.2',                                keyLabel:'API Key de Open WebUI', hint:'Nombre exacto del modelo en Open WebUI — ver ollama.com/library',    keyHint:'Genera en: Configuración → Cuenta → API Keys', baseUrl:'' },
-  bedrock:   { model:'us.anthropic.claude-3-5-sonnet-20241022-v2:0', keyLabel:'', hint:'',      keyHint:'',                             baseUrl:'' },
+  anthropic: { model:'claude-sonnet-4-6',                            keyLabel:'Anthropic API Key',     keyHint:'Empieza con sk-ant-…', hint:'Obtén en console.anthropic.com',  baseUrl:'' },
+  openai:    { model:'gpt-4o-mini',                                  keyLabel:'OpenAI API Key',        keyHint:'Empieza con sk-…',     hint:'Obtén en platform.openai.com',    baseUrl:'' },
+  google:    { model:'gemini-2.0-flash',                             keyLabel:'Google AI API Key',     keyHint:'Empieza con AIza…',    hint:'Obtén en aistudio.google.com',    baseUrl:'' },
+  deepseek:  { model:'deepseek-chat',                                keyLabel:'DeepSeek API Key',      keyHint:'',                     hint:'Obtén en platform.deepseek.com',  baseUrl:'https://api.deepseek.com' },
+  groq:      { model:'llama-3.3-70b-versatile',                      keyLabel:'Groq API Key (gratis)', keyHint:'Empieza con gsk_…',    hint:'Obtén en console.groq.com',       baseUrl:'https://api.groq.com/openai/v1' },
+  mistral:   { model:'mistral-small-latest',                         keyLabel:'Mistral API Key',       keyHint:'',                     hint:'Obtén en console.mistral.ai',     baseUrl:'' },
+  cohere:    { model:'command-r-08-2024',                            keyLabel:'Cohere API Key',        keyHint:'',                     hint:'Obtén en dashboard.cohere.com',   baseUrl:'' },
+  xai:       { model:'grok-2-1212',                                  keyLabel:'xAI API Key',           keyHint:'',                     hint:'Obtén en console.x.ai',           baseUrl:'https://api.x.ai/v1' },
+  ollama:    { model:'llama3.2',                                     keyLabel:'',                      keyHint:'',                     hint:'',                                baseUrl:'' },
+  openwebui: { model:'llama3.2',                                     keyLabel:'API Key de Open WebUI', keyHint:'',                     hint:'',                                baseUrl:'' },
+  bedrock:   { model:'us.anthropic.claude-3-5-sonnet-20241022-v2:0', keyLabel:'',                      keyHint:'',                     hint:'',                                baseUrl:'' },
 };
 
 function llmConfig() {
   return {
     form: {
-      provider: '{{ config.llm.provider or "anthropic" }}',
-      model:    '{{ config.llm.model or "" }}',
-      api_key:  '',
-      base_url: '{{ config.llm.base_url or "" }}',
+      provider:   '{{ config.llm.provider or "anthropic" }}',
+      model:      '{{ config.llm.model or "" }}',
+      api_key:    '',
+      base_url:   '{{ config.llm.base_url or "" }}',
       aws_region: 'us-east-1',
     },
     saving:false, saved:false, testing:false, testResult:'', testOk:false,
@@ -225,10 +226,10 @@ function llmConfig() {
 
     onProviderChange() {
       const def = PROVIDER_DEFAULTS[this.form.provider];
-      // Always reset base_url and model when switching providers
-      this.form.base_url = def?.baseUrl || '';
-      this.form.model    = '';
-      this.testResult    = '';
+      this.form.base_url  = def?.baseUrl || '';
+      this.form.model     = '';
+      this.modelsList     = [];
+      this.testResult     = '';
     },
 
     async save() {
@@ -258,7 +259,7 @@ function llmConfig() {
           body: JSON.stringify(this.form),
         });
         const d = await r.json();
-        this.testOk    = d.ok;
+        this.testOk     = d.ok;
         this.testResult = d.ok
           ? '✓ Conexión exitosa · ' + d.model
           : '✗ ' + (typeof d.error === 'string' ? d.error : JSON.stringify(d.error));
