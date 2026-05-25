@@ -67,16 +67,8 @@
           <label class="label">URL base del servidor</label>
           <input x-model="form.base_url" type="text" class="input"
                  placeholder="http://localhost:11434  ó  https://tu-openwebui.com/api" />
-          <!-- Warn if URL looks like OpenWebUI root without /api -->
-          <p x-show="form.base_url && !form.base_url.trim().endsWith('/api') && form.base_url.includes('.')"
-             style="font-size:0.75rem;color:#f59e0b;margin-top:0.375rem;display:flex;align-items:center;gap:0.3rem">
-            ⚠️ Si usas Open WebUI, añade <code style="background:#1e293b;padding:0.1rem 0.3rem;border-radius:0.25rem">/api</code>
-            al final de la URL.
-            <button type="button"
-                    @click="form.base_url = form.base_url.replace(/\\/+$/, '') + '/api'"
-                    style="background:#f59e0b;color:#000;border:none;border-radius:0.25rem;padding:0.1rem 0.4rem;font-size:0.7rem;cursor:pointer;font-weight:700">
-              Añadir /api
-            </button>
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
+            La URL se corrige automáticamente al cargar modelos.
           </p>
         </div>
         <div>
@@ -291,6 +283,15 @@ function llmConfig() {
         const d = await r.json();
         if (d.ok && d.models?.length) {
           this.modelsList = d.models;
+          // Auto-fix base_url: extract the correct base from the working endpoint
+          // e.g. endpoint = "https://ollama.warlockcode.com/api/models"
+          //      → base_url should be "https://ollama.warlockcode.com/api"
+          if (d.endpoint) {
+            const ep = d.endpoint.replace(/\/(models|tags)$/, '');
+            if (ep !== this.form.base_url) {
+              this.form.base_url = ep;
+            }
+          }
         } else {
           this.testOk = false;
           this.testResult = '✗ ' + (d.error || 'No se encontraron modelos');

@@ -20,11 +20,16 @@ from typing import Any
 from appt_agent.llm.base import AbstractLLM, register_provider
 from appt_agent.models import LLMResponse, Message, Role
 
-# Paths tried in order.
-# bare Ollama ≥0.1.24 → /v1/chat/completions
-# Open WebUI          → /chat/completions  (relative to the /api base)
-_CANDIDATE_PATHS = ("v1/chat/completions", "chat/completions")
-_RETRY_STATUSES  = {400, 404, 405, 422}
+# Paths tried in order (relative to base_url).
+# Covers all common Ollama / Open WebUI layouts regardless of how much
+# of the path the user included in base_url.
+_CANDIDATE_PATHS = (
+    "v1/chat/completions",       # bare Ollama ≥0.1.24 at root
+    "api/v1/chat/completions",   # bare Ollama ≥0.1.24 at root (user omitted /api)
+    "chat/completions",          # Open WebUI when base_url ends with /api
+    "api/chat/completions",      # Open WebUI when base_url is the root domain
+)
+_RETRY_STATUSES  = {404, 405, 422}  # 400 may mean wrong model, not wrong path
 
 
 @register_provider("ollama")
