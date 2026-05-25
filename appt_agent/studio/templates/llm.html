@@ -18,8 +18,7 @@
           <label class="label">Provider</label>
           <select x-model="form.provider" @change="onProviderChange()" class="input">
             <optgroup label="── Sin costo / local ──────────">
-              <option value="ollama">Ollama (local / servidor propio)</option>
-              <option value="openwebui">Open WebUI (UI para Ollama)</option>
+              <option value="ollama">Ollama / Open WebUI (servidor propio)</option>
             </optgroup>
             <optgroup label="── Bajo costo ──────────────────">
               <option value="groq">Groq (Llama ultra-rápido, gratis)</option>
@@ -73,74 +72,43 @@
         </div>
       </div>
 
-      <!-- Ollama -->
-      <div x-show="form.provider === 'ollama'" style="display:flex;flex-direction:column;gap:1rem">
+      <!-- Ollama / Open WebUI (merged) -->
+      <div x-show="form.provider === 'ollama' || form.provider === 'openwebui'" style="display:flex;flex-direction:column;gap:1rem">
 
         <!-- Info banner -->
-        <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:0.5rem;padding:0.875rem 1rem;font-size:0.8rem;color:#a5b4fc;display:flex;gap:0.625rem">
-          <span style="font-size:1rem;flex-shrink:0">ℹ️</span>
-          <span>
-            Ollama corre de forma <strong>gratuita</strong> en tu servidor.
-            Asegúrate de tener al menos un modelo descargado:
-            <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.35rem;border-radius:0.25rem">ollama pull llama3.2</code>
-          </span>
+        <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:0.5rem;padding:0.875rem 1rem;font-size:0.8rem;color:#a5b4fc">
+          <p style="margin:0 0 0.5rem;font-weight:700">Ollama &amp; Open WebUI — gratuito, sin costo por llamada</p>
+          <p style="margin:0;line-height:1.7">
+            • <strong>Ollama puro</strong>: URL = <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem">http://localhost:11434</code> — sin API key<br>
+            • <strong>Open WebUI</strong>: URL = tu dominio + <code style="background:rgba(99,102,241,0.2);padding:0.1rem 0.3rem;border-radius:0.25rem">/api</code>
+              (ej: <span style="color:#a5b4fc">https://ollama.warlockcode.com/api</span>) + API key de Open WebUI
+          </p>
+          <p style="margin:0.5rem 0 0;color:#6366f1;font-size:0.75rem">
+            El endpoint se detecta automáticamente — no necesitas elegir entre Ollama y Open WebUI.
+          </p>
         </div>
 
         <div>
           <label class="label">Base URL del servidor</label>
           <input x-model="form.base_url" type="text" class="input"
-                 placeholder="http://localhost:11434" />
+                 placeholder="http://localhost:11434  ó  https://ollama.miservidor.com/api" />
           <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
-            URL donde corre Ollama — local o remoto
-            (ej: <span style="color:#6366f1">https://ollama.miservidor.com</span>).
+            Ollama puro: <code style="color:#6366f1">http://localhost:11434</code> &nbsp;·&nbsp;
+            Open WebUI: tu dominio + <code style="color:#a78bfa">/api</code>
+            (ej: <span style="color:#a78bfa">https://ollama.warlockcode.com/api</span>)
           </p>
         </div>
 
         <div>
           <label class="label">
             API Key
-            <span style="font-weight:400;text-transform:none;color:#4b5563;font-size:0.7rem">&nbsp;— solo si tu Ollama tiene auth</span>
+            <span style="font-weight:400;text-transform:none;color:#4b5563;font-size:0.7rem">&nbsp;— solo si tu servidor tiene auth (Open WebUI siempre requiere)</span>
           </label>
           <input x-model="form.api_key" type="password" class="input"
-                 placeholder="Dejar vacío si no se requiere" autocomplete="off" />
-          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
-            Se envía como
-            <code style="background:#1e293b;padding:0.1rem 0.35rem;border-radius:0.25rem;font-size:0.7rem">Authorization: Bearer &lt;token&gt;</code>.
-            Verifica si tu Ollama requiere auth:
-            <code style="background:#1e293b;padding:0.1rem 0.35rem;border-radius:0.25rem;font-size:0.7rem">curl {{ '{{' }} base_url {{ '}}' }}/api/tags</code>
-          </p>
-        </div>
-      </div>
-
-      <!-- Open WebUI -->
-      <div x-show="form.provider === 'openwebui'" style="display:flex;flex-direction:column;gap:1rem">
-
-        <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.3);border-radius:0.5rem;padding:0.875rem 1rem;font-size:0.8rem;color:#c4b5fd">
-          <p style="font-weight:700;margin:0 0 0.5rem">Open WebUI detectado</p>
-          <p style="margin:0;line-height:1.6">
-            Open WebUI es una interfaz web para Ollama. Usa su propia API en
-            <code style="background:rgba(139,92,246,0.2);padding:0.1rem 0.35rem;border-radius:0.25rem">/api/chat/completions</code>
-            y requiere un API key propio.
-          </p>
-        </div>
-
-        <div>
-          <label class="label">URL base <span style="font-weight:400;text-transform:none;color:#4b5563;font-size:0.7rem">— tu URL + <code>/api</code> al final</span></label>
-          <input x-model="form.base_url" type="text" class="input"
-                 placeholder="https://ollama.warlockcode.com/api" />
-          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem">
-            Toma la URL del browser y agrega <code style="color:#a78bfa">/api</code> al final.
-            Ejemplo: <span style="color:#a78bfa" x-text="form.base_url || 'https://tu-openwebui.com/api'"></span>
-          </p>
-        </div>
-
-        <div>
-          <label class="label">API Key de Open WebUI</label>
-          <input x-model="form.api_key" type="password" class="input"
-                 placeholder="sk-..." autocomplete="off" />
-          <p style="font-size:0.75rem;line-height:1.6;margin-top:0.375rem">
-            <span style="color:#9ca3af">Obtén el key en Open WebUI:</span>
-            <span style="color:#c4b5fd">icono usuario arriba-derecha → Configuración → Cuenta → API Keys → Crear</span>
+                 placeholder="Vacío para Ollama local · sk-… para Open WebUI" autocomplete="off" />
+          <p style="font-size:0.75rem;color:#4b5563;margin-top:0.375rem;line-height:1.6">
+            Open WebUI: obtén el key en
+            <span style="color:#c4b5fd">usuario ↗ Configuración → Cuenta → API Keys → Crear</span>
           </p>
         </div>
 
