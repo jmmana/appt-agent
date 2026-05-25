@@ -234,8 +234,10 @@ function llmConfig() {
 
     onProviderChange() {
       const def = PROVIDER_DEFAULTS[this.form.provider];
-      if (!this.form.model) this.form.model = '';
-      if (def?.baseUrl && !this.form.base_url) this.form.base_url = def.baseUrl;
+      // Always reset base_url and model when switching providers
+      this.form.base_url = def?.baseUrl || '';
+      this.form.model    = '';
+      this.testResult    = '';
     },
 
     async save() {

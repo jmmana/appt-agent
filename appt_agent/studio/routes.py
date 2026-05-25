@@ -89,11 +89,13 @@ async def save_llm(request: Request) -> JSONResponse:
     provider = body.get("provider", "anthropic")
     model    = body.get("model", "")
     api_key  = body.get("api_key", "")
-    base_url = body.get("base_url", "")
+    # Normalize base_url: strip whitespace + collapse double slashes after scheme
+    raw_url  = body.get("base_url", "").strip()
+    import re as _re
+    base_url = _re.sub(r'(?<!:)/{2,}', '/', raw_url)  # fix //foo → /foo (not https://)
+    base_url = base_url.rstrip("/")
     store    = _get_store(request)
-    data: dict[str, str] = {"llm_provider": provider, "llm_base_url": base_url}
-    if model:
-        data["llm_model"] = model
+    data: dict[str, str] = {"llm_provider": provider, "llm_base_url": base_url, "llm_model": model}
     if api_key:
         data["llm_api_key"] = api_key
     await store.set_many(data)
