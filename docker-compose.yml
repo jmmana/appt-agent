@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  appt-agent-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Add/remove extras as needed
+        EXTRAS: "anthropic,openai,google,outlook,mistral,cohere,server"
+    image: appt-agent-studio:latest
+    container_name: appt-agent-studio
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      # Persistent data: SQLite databases + Google credentials
+      - appt_data:/data
+    environment:
+      - APPT_DATA_DIR=/data
+      - PORT=8000
+      # Optional: pre-configure via env vars (overrides UI config)
+      # - ANTHROPIC_API_KEY=sk-ant-...
+      # - OPENAI_API_KEY=sk-...
+      # AWS Bedrock (if using bedrock provider)
+      # - AWS_ACCESS_KEY_ID=...
+      # - AWS_SECRET_ACCESS_KEY=...
+      # - AWS_DEFAULT_REGION=us-east-1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  appt_data:
+    driver: local

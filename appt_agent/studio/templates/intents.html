@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Intenciones — appt-agent studio{% endblock %}
+{% block page_title %}Intenciones{% endblock %}
+{% block page_subtitle %}Define qué acciones puede reconocer el agente y sus webhooks{% endblock %}
+
+{% block header_actions %}
+<button @click="$dispatch('open-add')" class="btn-primary">+ Nueva intención</button>
+{% endblock %}
+
+{% block content %}
+<div x-data="intentsPage()" @open-add="openForm(null)">
+
+  <!-- Intents table -->
+  <div class="card">
+    {% if intents %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-800">
+          <th class="text-left text-xs text-gray-500 pb-3 font-medium">Nombre</th>
+          <th class="text-left text-xs text-gray-500 pb-3 font-medium">Descripción</th>
+          <th class="text-left text-xs text-gray-500 pb-3 font-medium">Webhook</th>
+          <th class="text-left text-xs text-gray-500 pb-3 font-medium">Estado</th>
+          <th class="text-left text-xs text-gray-500 pb-3 font-medium"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-800">
+        {% for intent in intents %}
+        <tr>
+          <td class="py-3 font-mono text-indigo-400 text-xs">{{ intent.name }}</td>
+          <td class="py-3 text-gray-300 max-w-xs truncate">{{ intent.description }}</td>
+          <td class="py-3 text-gray-500 text-xs">
+            {% if intent.webhook %}
+              <span class="font-mono truncate max-w-[180px] block">{{ intent.webhook }}</span>
+            {% else %}
+              <span class="text-gray-700">—</span>
+            {% endif %}
+          </td>
+          <td class="py-3">
+            {% if intent.active %}<span class="badge-green">Activa</span>
+            {% else %}<span class="badge-gray">Inactiva</span>{% endif %}
+          </td>
+          <td class="py-3 text-right space-x-2">
+            <button @click="openForm({{ intent | tojson }})" class="btn-secondary text-xs py-1">Editar</button>
+            <button @click="deleteIntent({{ intent.id }})" class="btn-danger">Eliminar</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center py-12">
+      <p class="text-4xl mb-3">🏷️</p>
+      <p class="text-gray-400 text-sm">No hay intenciones configuradas.</p>
+      <p class="text-gray-600 text-xs mt-1">Crea una para que el agente reconozca acciones como "reservar cita" o "cancelar".</p>
+      <button @click="openForm(null)" class="btn-primary mt-4">+ Crear primera intención</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Tips -->
+  <div class="mt-4 card bg-indigo-950/30 border-indigo-900/50">
+    <h3 class="text-xs font-semibold text-indigo-400 mb-2">💡 Intenciones recomendadas</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div>
+        <p class="text-xs font-mono text-indigo-300">reservar_cita</p>
+        <p class="text-xs text-gray-500">El usuario quiere agendar una nueva cita</p>
+      </div>
+      <div>
+        <p class="text-xs font-mono text-indigo-300">cancelar_cita</p>
+        <p class="text-xs text-gray-500">El usuario quiere cancelar una cita existente</p>
+      </div>
+      <div>
+        <p class="text-xs font-mono text-indigo-300">consultar_cita</p>
+        <p class="text-xs text-gray-500">El usuario quiere saber cuándo es su cita</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit modal -->
+  <div x-show="showModal" x-cloak
+       class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+       @keydown.escape.window="showModal=false">
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl"
+         @click.outside="showModal=false">
+      <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+        <h3 class="font-semibold text-white" x-text="editId ? 'Editar intención' : 'Nueva intención'"></h3>
+        <button @click="showModal=false" class="text-gray-500 hover:text-white">✕</button>
+      </div>
+      <form @submit.prevent="saveIntent()" class="p-6 space-y-4">
+        <div>
+          <label class="label">Nombre <span class="text-gray-600">(snake_case, sin espacios)</span></label>
+          <input x-model="form.name" type="text" class="input" placeholder="reservar_cita" required
+                 pattern="[a-z0-9_]+" :readonly="!!editId" />
+        </div>
+        <div>
+          <label class="label">Descripción para el LLM</label>
+          <textarea x-model="form.description" class="input" rows="2"
+                    placeholder="El usuario quiere agendar una nueva cita" required></textarea>
+        </div>
+        <div>
+          <label class="label">Webhook URL <span class="text-gray-600">(opcional)</span></label>
+          <input x-model="form.webhook" type="url" class="input"
+                 placeholder="https://mi-app.com/webhooks/reservar" />
+        </div>
+        <div x-show="form.webhook">
+          <label class="label">Webhook Secret HMAC <span class="text-gray-600">(opcional)</span></label>
+          <input x-model="form.webhook_secret" type="password" class="input"
+                 placeholder="mi-secreto-seguro" autocomplete="off" />
+          <p class="text-xs text-gray-600 mt-1">Firma las peticiones con HMAC-SHA256 en el header <code class="bg-gray-800 px-1 rounded">X-Signature-256</code>.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input x-model="form.active" type="checkbox" id="active" class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-indigo-500" />
+          <label for="active" class="text-sm text-gray-300 cursor-pointer">Activa</label>
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" @click="showModal=false" class="btn-secondary">Cancelar</button>
+          <button type="submit" :disabled="saving" class="btn-primary">
+            <span x-show="!saving">Guardar intención</span>
+            <span x-show="saving">Guardando...</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function intentsPage() {
+  return {
+    showModal: false, saving: false,
+    editId: null,
+    form: { name: '', description: '', webhook: '', webhook_secret: '', active: true },
+
+    openForm(intent) {
+      if (intent) {
+        this.editId = intent.id;
+        this.form = { name: intent.name, description: intent.description,
+                      webhook: intent.webhook || '', webhook_secret: '',
+                      active: !!intent.active };
+      } else {
+        this.editId = null;
+        this.form = { name: '', description: '', webhook: '', webhook_secret: '', active: true };
+      }
+      this.showModal = true;
+    },
+
+    async saveIntent() {
+      this.saving = true;
+      const url = this.editId ? `/studio/intents/${this.editId}` : '/studio/intents';
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.form),
+      });
+      this.saving = false;
+      window.location.reload();
+    },
+
+    async deleteIntent(id) {
+      if (!confirm('¿Eliminar esta intención?')) return;
+      await fetch(`/studio/intents/${id}`, { method: 'DELETE' });
+      window.location.reload();
+    },
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Modelo LLM — appt-agent studio{% endblock %}
+{% block page_title %}Modelo LLM{% endblock %}
+{% block page_subtitle %}Configura el proveedor y modelo de inteligencia artificial{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl" x-data="llmConfig()" x-init="init()">
+  <form @submit.prevent="save()" class="space-y-6">
+
+    <!-- Provider -->
+    <div class="card space-y-5">
+      <h2 class="text-sm font-semibold text-white">Proveedor</h2>
+
+      <div>
+        <label class="label">Provider</label>
+        <select x-model="form.provider" @change="onProviderChange()" class="input">
+          <optgroup label="Sin costo (local)">
+            <option value="ollama">Ollama / Meta Llama (local)</option>
+          </optgroup>
+          <optgroup label="Bajo costo">
+            <option value="groq">Groq (Llama ultra-rápido)</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="cohere">Cohere</option>
+          </optgroup>
+          <optgroup label="Populares">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI (GPT)</option>
+            <option value="google">Google (Gemini)</option>
+            <option value="mistral">Mistral AI</option>
+            <option value="xai">xAI (Grok)</option>
+          </optgroup>
+          <optgroup label="Cloud">
+            <option value="bedrock">Amazon Bedrock</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div>
+        <label class="label">
+          Modelo
+          <span class="text-gray-600 font-normal ml-1" x-text="modelHint"></span>
+        </label>
+        <input x-model="form.model" type="text" class="input"
+               :placeholder="defaultModel" />
+        <p class="text-xs text-gray-600 mt-1">Deja vacío para usar el modelo por defecto del provider.</p>
+      </div>
+    </div>
+
+    <!-- Credentials -->
+    <div class="card space-y-5">
+      <h2 class="text-sm font-semibold text-white">Credenciales</h2>
+
+      <!-- API Key (most providers) -->
+      <div x-show="form.provider !== 'ollama' && form.provider !== 'bedrock'">
+        <label class="label" x-text="apiKeyLabel"></label>
+        <input x-model="form.api_key" type="password" class="input"
+               placeholder="••••••••••••••••" autocomplete="off" />
+        <p class="text-xs text-gray-600 mt-1" x-text="apiKeyHint"></p>
+      </div>
+
+      <!-- Ollama base URL -->
+      <div x-show="form.provider === 'ollama'">
+        <label class="label">Base URL de Ollama</label>
+        <input x-model="form.base_url" type="text" class="input"
+               placeholder="http://localhost:11434" />
+        <p class="text-xs text-gray-600 mt-1">URL donde corre tu servidor Ollama.</p>
+      </div>
+
+      <!-- Bedrock -->
+      <div x-show="form.provider === 'bedrock'" class="space-y-3">
+        <div>
+          <label class="label">AWS Region</label>
+          <input x-model="form.aws_region" type="text" class="input" placeholder="us-east-1" />
+        </div>
+        <p class="text-xs text-gray-500">Las credenciales de AWS se leen de variables de entorno
+          <code class="bg-gray-800 px-1 rounded">AWS_ACCESS_KEY_ID</code> /
+          <code class="bg-gray-800 px-1 rounded">AWS_SECRET_ACCESS_KEY</code>
+          o del perfil ~/.aws/credentials.</p>
+      </div>
+    </div>
+
+    <!-- Test + Save -->
+    <div class="flex items-center gap-3">
+      <button type="button" @click="testConn()" :disabled="testing"
+              class="btn-secondary">
+        <span x-show="!testing">🔌 Probar conexión</span>
+        <span x-show="testing">Probando...</span>
+      </button>
+      <button type="submit" :disabled="saving" class="btn-primary">
+        <span x-show="!saving">💾 Guardar</span>
+        <span x-show="saving">Guardando...</span>
+      </button>
+      <span x-show="saved" x-cloak class="text-xs text-green-400">✓ Guardado</span>
+      <span x-show="testResult" x-cloak class="text-xs"
+            :class="testOk ? 'text-green-400' : 'text-red-400'"
+            x-text="testResult"></span>
+    </div>
+  </form>
+</div>
+
+<script>
+const PROVIDER_DEFAULTS = {
+  anthropic: { model: 'claude-sonnet-4-6',         keyLabel: 'Anthropic API Key',    hint: 'console.anthropic.com', keyHint: 'Empieza con sk-ant-...' },
+  openai:    { model: 'gpt-4o-mini',               keyLabel: 'OpenAI API Key',       hint: 'platform.openai.com',   keyHint: 'Empieza con sk-...' },
+  google:    { model: 'gemini-2.0-flash',           keyLabel: 'Google AI API Key',    hint: 'aistudio.google.com',   keyHint: 'Empieza con AIza...' },
+  deepseek:  { model: 'deepseek-chat',              keyLabel: 'DeepSeek API Key',     hint: 'platform.deepseek.com', keyHint: '' },
+  groq:      { model: 'llama-3.3-70b-versatile',   keyLabel: 'Groq API Key',         hint: 'console.groq.com',      keyHint: 'Empieza con gsk_...' },
+  mistral:   { model: 'mistral-small-latest',       keyLabel: 'Mistral API Key',      hint: 'console.mistral.ai',    keyHint: '' },
+  cohere:    { model: 'command-r-08-2024',          keyLabel: 'Cohere API Key',       hint: 'dashboard.cohere.com',  keyHint: '' },
+  xai:       { model: 'grok-2-1212',               keyLabel: 'xAI API Key',          hint: 'console.x.ai',          keyHint: '' },
+  ollama:    { model: 'llama3.3',                   keyLabel: '',                     hint: '',                      keyHint: '' },
+  bedrock:   { model: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', keyLabel: '', hint: '', keyHint: '' },
+};
+
+function llmConfig() {
+  return {
+    form: { provider: '{{ config.llm.provider }}', model: '{{ config.llm.model }}',
+            api_key: '', base_url: '{{ config.llm.base_url or "" }}', aws_region: 'us-east-1' },
+    saving: false, saved: false, testing: false, testResult: '', testOk: false,
+    get defaultModel() { return PROVIDER_DEFAULTS[this.form.provider]?.model || ''; },
+    get apiKeyLabel()  { return PROVIDER_DEFAULTS[this.form.provider]?.keyLabel || 'API Key'; },
+    get apiKeyHint()   { return PROVIDER_DEFAULTS[this.form.provider]?.keyHint || ''; },
+    get modelHint()    { return PROVIDER_DEFAULTS[this.form.provider]?.hint ? '— ' + PROVIDER_DEFAULTS[this.form.provider].hint : ''; },
+    init() {},
+    onProviderChange() {
+      const def = PROVIDER_DEFAULTS[this.form.provider];
+      if (def && !this.form.model) this.form.model = def.model;
+    },
+    async save() {
+      this.saving = true; this.saved = false;
+      const body = new FormData();
+      Object.entries(this.form).forEach(([k, v]) => body.append(k, v));
+      await fetch('/studio/llm', { method: 'POST', body });
+      this.saving = false; this.saved = true;
+      setTimeout(() => this.saved = false, 3000);
+    },
+    async testConn() {
+      this.testing = true; this.testResult = '';
+      try {
+        const r = await fetch('/studio/llm/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.form),
+        });
+        const d = await r.json();
+        this.testOk = d.ok;
+        this.testResult = d.ok ? '✓ Conexión exitosa: ' + d.model : '✗ ' + d.error;
+      } catch(e) { this.testOk = false; this.testResult = '✗ ' + e.message; }
+      this.testing = false;
+    },
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Negocio — appt-agent studio{% endblock %}
+{% block page_title %}Configuración del Negocio{% endblock %}
+{% block page_subtitle %}Personaliza cómo se presenta el agente y qué información recolecta{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl" x-data="businessConfig()">
+  <form @submit.prevent="save()" class="space-y-6">
+
+    <div class="card space-y-5">
+      <h2 class="text-sm font-semibold text-white">Identidad</h2>
+      <div>
+        <label class="label">Nombre del negocio</label>
+        <input x-model="form.business_name" type="text" class="input"
+               placeholder="Ej: Clínica Santa María, Consultorio Dr. García..." />
+        <p class="text-xs text-gray-600 mt-1">El agente usará este nombre en sus respuestas.</p>
+      </div>
+    </div>
+
+    <div class="card space-y-5">
+      <h2 class="text-sm font-semibold text-white">Citas</h2>
+      <div>
+        <label class="label">Duración por defecto (minutos)</label>
+        <input x-model.number="form.appointment_duration" type="number" min="5" max="480" step="5"
+               class="input" style="max-width: 120px" />
+      </div>
+
+      <div>
+        <label class="label">Información requerida antes de confirmar</label>
+        <div class="space-y-2">
+          <template x-for="slot in availableSlots" :key="slot.key">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" :value="slot.key" x-model="form.required_slots"
+                     class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-indigo-500 focus:ring-indigo-500" />
+              <span class="text-sm text-gray-300">
+                <span x-text="slot.label"></span>
+                <span class="text-gray-600 text-xs ml-1" x-text="slot.hint"></span>
+              </span>
+            </label>
+          </template>
+        </div>
+        <p class="text-xs text-gray-600 mt-2">El agente recolectará estos datos antes de mostrar la confirmación.</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" :disabled="saving" class="btn-primary">
+        <span x-show="!saving">💾 Guardar</span>
+        <span x-show="saving">Guardando...</span>
+      </button>
+      <span x-show="saved" x-cloak class="text-xs text-green-400">✓ Guardado</span>
+    </div>
+  </form>
+</div>
+
+<script>
+function businessConfig() {
+  return {
+    form: {
+      business_name: '{{ config.business_name | e }}',
+      appointment_duration: {{ config.appointment_duration }},
+      required_slots: {{ config.required_slots | tojson }},
+    },
+    availableSlots: [
+      { key: 'name',    label: 'Nombre completo',  hint: '(recomendado)' },
+      { key: 'date',    label: 'Fecha',             hint: '(recomendado)' },
+      { key: 'time',    label: 'Hora',              hint: '(recomendado)' },
+      { key: 'service', label: 'Tipo de servicio',  hint: '' },
+      { key: 'email',   label: 'Correo electrónico', hint: '' },
+    ],
+    saving: false, saved: false,
+    async save() {
+      this.saving = true; this.saved = false;
+      await fetch('/studio/business', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.form),
+      });
+      this.saving = false; this.saved = true;
+      setTimeout(() => this.saved = false, 3000);
+    },
+  }
+}
+</script>
+{% endblock %}

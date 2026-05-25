@@ -43,6 +43,7 @@ mistral   = ["mistralai>=1.2"]
 cohere    = ["cohere>=5.11"]
 bedrock   = ["boto3>=1.35"]
 server    = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+studio    = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "jinja2>=3.1", "python-multipart>=0.0.12"]
 dev       = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",

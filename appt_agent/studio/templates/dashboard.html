@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — appt-agent studio{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Resumen del agente en tiempo real{% endblock %}
+
+{% block content %}
+<!-- Stats cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+  <div class="card">
+    <p class="text-xs text-gray-500 mb-1">Conversaciones</p>
+    <p class="text-3xl font-bold text-white">{{ stats.total_conversations }}</p>
+  </div>
+  <div class="card">
+    <p class="text-xs text-gray-500 mb-1">Citas reservadas</p>
+    <p class="text-3xl font-bold text-green-400">{{ stats.total_appointments }}</p>
+  </div>
+  <div class="card">
+    <p class="text-xs text-gray-500 mb-1">Tokens totales</p>
+    <p class="text-3xl font-bold text-indigo-400">{{ "{:,}".format(stats.total_input_tokens + stats.total_output_tokens) }}</p>
+    <p class="text-xs text-gray-600 mt-1">{{ stats.total_input_tokens }} in / {{ stats.total_output_tokens }} out</p>
+  </div>
+  <div class="card">
+    <p class="text-xs text-gray-500 mb-1">Costo estimado</p>
+    <p class="text-3xl font-bold text-yellow-400">${{ "%.4f"|format(stats.total_cost_usd) }}</p>
+    <p class="text-xs text-gray-600 mt-1">USD total</p>
+  </div>
+</div>
+
+<!-- Config summary + Quick actions -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Current config -->
+  <div class="card">
+    <h2 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+      <span>⚙️</span> Configuración actual
+    </h2>
+    <table class="w-full text-sm">
+      <tbody class="divide-y divide-gray-800">
+        <tr>
+          <td class="py-2.5 text-gray-500 w-40">LLM Provider</td>
+          <td class="py-2.5 text-white font-medium">{{ config.llm.provider | title }}</td>
+          <td class="py-2.5 text-right">
+            <a href="/studio/llm" class="text-xs text-indigo-400 hover:text-indigo-300">Editar →</a>
+          </td>
+        </tr>
+        <tr>
+          <td class="py-2.5 text-gray-500">Modelo</td>
+          <td class="py-2.5 text-white">{{ config.llm.model }}</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="py-2.5 text-gray-500">API Key</td>
+          <td class="py-2.5">
+            {% if config.llm.api_key %}
+              <span class="badge-green">✓ Configurada</span>
+            {% else %}
+              <span class="badge-yellow">⚠ Falta</span>
+            {% endif %}
+          </td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="py-2.5 text-gray-500">Negocio</td>
+          <td class="py-2.5 text-white">{{ config.business_name }}</td>
+          <td class="py-2.5 text-right">
+            <a href="/studio/business" class="text-xs text-indigo-400 hover:text-indigo-300">Editar →</a>
+          </td>
+        </tr>
+        <tr>
+          <td class="py-2.5 text-gray-500">Intenciones</td>
+          <td class="py-2.5 text-white">{{ config.intents | length }} activas</td>
+          <td class="py-2.5 text-right">
+            <a href="/studio/intents" class="text-xs text-indigo-400 hover:text-indigo-300">Gestionar →</a>
+          </td>
+        </tr>
+        <tr>
+          <td class="py-2.5 text-gray-500">Duración cita</td>
+          <td class="py-2.5 text-white">{{ config.appointment_duration }} min</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Quick test chat -->
+  <div class="card flex flex-col" x-data="quickChat()">
+    <h2 class="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+      <span>💬</span> Chat rápido
+      <span class="text-xs text-gray-500 font-normal">sesión: demo-dashboard</span>
+    </h2>
+
+    <!-- Messages -->
+    <div class="flex-1 overflow-y-auto space-y-2 mb-3 min-h-[180px] max-h-[220px]" x-ref="msgs">
+      <template x-for="m in messages" :key="m.id">
+        <div :class="m.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+          <div :class="m.role === 'user'
+            ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-3 py-2 text-sm max-w-[75%]'
+            : 'bg-gray-800 text-gray-100 rounded-2xl rounded-tl-sm px-3 py-2 text-sm max-w-[75%]'"
+            x-text="m.content">
+          </div>
+        </div>
+      </template>
+      <div x-show="loading" class="flex justify-start">
+        <div class="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2">
+          <span class="text-gray-400 text-sm animate-pulse">...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="flex gap-2">
+      <input x-model="input" @keydown.enter="send()"
+             type="text" placeholder="Escribe un mensaje..."
+             class="input flex-1" :disabled="loading" />
+      <button @click="send()" :disabled="loading || !input.trim()"
+              class="btn-primary">Enviar</button>
+    </div>
+
+    {% if not config.llm.api_key %}
+    <p class="text-xs text-yellow-500 mt-2">⚠ Configura tu API Key en <a href="/studio/llm" class="underline">Modelo LLM</a> para usar el chat real.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function quickChat() {
+  return {
+    messages: [],
+    input: '',
+    loading: false,
+    async send() {
+      if (!this.input.trim()) return;
+      const msg = this.input.trim();
+      this.input = '';
+      this.messages.push({ id: Date.now(), role: 'user', content: msg });
+      this.loading = true;
+      this.$nextTick(() => this.$refs.msgs.scrollTop = 9999);
+      try {
+        const r = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: 'demo-dashboard', message: msg }),
+        });
+        const data = await r.json();
+        this.messages.push({ id: Date.now() + 1, role: 'assistant', content: data.reply });
+      } catch (e) {
+        this.messages.push({ id: Date.now() + 1, role: 'assistant', content: '❌ Error: ' + e.message });
+      } finally {
+        this.loading = false;
+        this.$nextTick(() => this.$refs.msgs.scrollTop = 9999);
+      }
+    }
+  }
+}
+</script>
+{% endblock %}

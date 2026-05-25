@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Chat de prueba — appt-agent studio{% endblock %}
+{% block page_title %}Chat de Prueba{% endblock %}
+{% block page_subtitle %}Simula una conversación real con el agente{% endblock %}
+
+{% block header_actions %}
+<button @click="clearSession()" class="btn-secondary text-xs">🗑 Nueva sesión</button>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto h-[calc(100vh-180px)] flex flex-col" x-data="chatPage()">
+  <!-- Session info -->
+  <div class="flex items-center justify-between mb-3 text-xs text-gray-500">
+    <span>Session ID: <code class="bg-gray-800 px-1.5 py-0.5 rounded font-mono" x-text="sessionId"></code></span>
+    <span x-show="lastIntent" x-cloak>
+      Intent: <code class="bg-indigo-900/50 text-indigo-300 px-1.5 py-0.5 rounded font-mono" x-text="lastIntent"></code>
+    </span>
+    <span x-show="lastState" x-cloak>
+      Estado: <code class="bg-gray-800 px-1.5 py-0.5 rounded font-mono" x-text="lastState"></code>
+    </span>
+  </div>
+
+  <!-- Messages -->
+  <div class="flex-1 overflow-y-auto card mb-3 space-y-3" x-ref="msgs">
+    <div x-show="messages.length === 0" class="text-center py-16">
+      <p class="text-4xl mb-3">👋</p>
+      <p class="text-gray-400 text-sm">Escribe un mensaje para comenzar la conversación.</p>
+      <div class="mt-4 flex flex-wrap gap-2 justify-center">
+        <button @click="send('Quiero una cita')" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-full transition-colors">Quiero una cita</button>
+        <button @click="send('Necesito reservar para mañana')" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-full transition-colors">Necesito reservar para mañana</button>
+        <button @click="send('Hola, quiero cancelar mi cita')" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-full transition-colors">Cancelar mi cita</button>
+      </div>
+    </div>
+
+    <template x-for="m in messages" :key="m.id">
+      <div :class="m.role === 'user' ? 'flex justify-end' : 'flex justify-start items-end gap-2'">
+        <div x-show="m.role === 'assistant'" class="text-lg flex-shrink-0">🤖</div>
+        <div>
+          <div :class="m.role === 'user'
+            ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm'
+            : 'bg-gray-800 text-gray-100 rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm'"
+            x-html="m.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')">
+          </div>
+          <!-- Token info for assistant messages -->
+          <div x-show="m.tokens" x-cloak class="text-xs text-gray-600 mt-1 ml-1"
+               x-text="m.tokens ? `${m.tokens.total_input_tokens}in / ${m.tokens.total_output_tokens}out · $${m.tokens.total_cost_usd.toFixed(5)}` : ''">
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <div x-show="loading" class="flex justify-start items-end gap-2">
+      <div class="text-lg">🤖</div>
+      <div class="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3">
+        <div class="flex gap-1">
+          <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay:0ms"></div>
+          <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay:150ms"></div>
+          <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay:300ms"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Appointment result banner -->
+  <div x-show="appointment" x-cloak class="mb-3 bg-green-900/30 border border-green-800/50 rounded-xl p-4">
+    <p class="text-xs font-semibold text-green-400 mb-1">✅ Cita confirmada</p>
+    <div class="text-xs text-green-300 space-y-0.5">
+      <p><span class="text-green-600">Nombre:</span> <span x-text="appointment?.attendee_name"></span></p>
+      <p><span class="text-green-600">Fecha:</span> <span x-text="appointment?.start ? new Date(appointment.start).toLocaleString('es') : ''"></span></p>
+      <p><span class="text-green-600">Servicio:</span> <span x-text="appointment?.service || 'General'"></span></p>
+    </div>
+  </div>
+
+  <!-- Input -->
+  <div class="flex gap-2">
+    <input x-model="input" @keydown.enter="send()" type="text"
+           placeholder="Escribe tu mensaje..." class="input flex-1"
+           :disabled="loading" autofocus />
+    <button @click="send()" :disabled="loading || !input.trim()" class="btn-primary px-5">
+      ➤
+    </button>
+  </div>
+
+  {% if not agent_ready %}
+  <div class="mt-2 text-xs text-yellow-500">
+    ⚠ El agente no está completamente configurado.
+    <a href="/studio/llm" class="underline">Configura el LLM</a> primero.
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function chatPage() {
+  return {
+    messages: [],
+    input: '',
+    loading: false,
+    sessionId: 'studio-' + Math.random().toString(36).slice(2, 8),
+    lastIntent: null,
+    lastState: null,
+    appointment: null,
+
+    async send(msg) {
+      const text = msg || this.input.trim();
+      if (!text) return;
+      this.input = '';
+      this.messages.push({ id: Date.now(), role: 'user', content: text });
+      this.loading = true;
+      this.$nextTick(() => this.$refs.msgs.scrollTop = 99999);
+
+      try {
+        const r = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: this.sessionId, message: text }),
+        });
+        const data = await r.json();
+        this.messages.push({
+          id: Date.now() + 1,
+          role: 'assistant',
+          content: data.reply,
+          tokens: data.tokens_used,
+        });
+        this.lastIntent = data.intent || null;
+        this.lastState  = data.state || null;
+        if (data.appointment) this.appointment = data.appointment;
+      } catch(e) {
+        this.messages.push({ id: Date.now() + 1, role: 'assistant', content: '❌ Error: ' + e.message });
+      } finally {
+        this.loading = false;
+        this.$nextTick(() => this.$refs.msgs.scrollTop = 99999);
+      }
+    },
+
+    clearSession() {
+      this.messages = [];
+      this.appointment = null;
+      this.lastIntent = null;
+      this.lastState = null;
+      this.sessionId = 'studio-' + Math.random().toString(36).slice(2, 8);
+    },
+  }
+}
+</script>
+{% endblock %}

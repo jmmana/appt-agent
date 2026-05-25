@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Calendarios — appt-agent studio{% endblock %}
+{% block page_title %}Calendarios{% endblock %}
+{% block page_subtitle %}Conecta el agente a Google Calendar, Outlook u otro proveedor{% endblock %}
+
+{% block content %}
+<div x-data="calendarsPage()" class="space-y-6">
+
+  <!-- Google Calendar -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📅</span>
+        <div>
+          <h2 class="text-sm font-semibold text-white">Google Calendar</h2>
+          <p class="text-xs text-gray-500">Conecta via OAuth2 o cuenta de servicio</p>
+        </div>
+      </div>
+      <span class="{{ 'badge-green' if google_connected else 'badge-gray' }}">
+        {{ '✓ Conectado' if google_connected else '○ No conectado' }}
+      </span>
+    </div>
+
+    <!-- Tabs -->
+    <div x-data="{ tab: 'oauth' }" class="space-y-4">
+      <div class="flex gap-1 bg-gray-800 p-1 rounded-lg w-fit">
+        <button @click="tab='oauth'" :class="tab==='oauth' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+                class="text-xs px-3 py-1.5 rounded-md transition-colors">OAuth2 (usuario)</button>
+        <button @click="tab='service'" :class="tab==='service' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+                class="text-xs px-3 py-1.5 rounded-md transition-colors">Service Account (servidor)</button>
+      </div>
+
+      <!-- OAuth2 tab -->
+      <div x-show="tab==='oauth'" class="space-y-4">
+        <div class="bg-gray-800/50 rounded-lg p-4 text-xs text-gray-400 space-y-2">
+          <p class="font-medium text-gray-300">¿Cómo configurar OAuth2?</p>
+          <ol class="list-decimal list-inside space-y-1.5 text-gray-500">
+            <li>Ve a <a href="https://console.cloud.google.com" target="_blank" class="text-indigo-400 underline">console.cloud.google.com</a> y crea o selecciona un proyecto</li>
+            <li>Habilita la <strong class="text-gray-300">Google Calendar API</strong></li>
+            <li>Ve a <strong class="text-gray-300">Credenciales → Crear credenciales → ID de cliente OAuth 2.0</strong></li>
+            <li>Tipo de aplicación: <strong class="text-gray-300">Aplicación de escritorio</strong></li>
+            <li>Descarga el JSON y súbelo aquí:</li>
+          </ol>
+        </div>
+
+        <div>
+          <label class="label">Subir archivo credentials.json de Google</label>
+          <div class="mt-1 flex items-center gap-3">
+            <input type="file" accept=".json" @change="uploadCredentials($event, 'google_oauth')"
+                   class="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-700 file:text-white file:text-xs hover:file:bg-gray-600" />
+          </div>
+          {% if google_oauth_file %}
+          <p class="text-xs text-green-400 mt-1">✓ Archivo cargado: {{ google_oauth_file }}</p>
+          {% endif %}
+        </div>
+
+        {% if google_oauth_file and not google_connected %}
+        <div class="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3 text-xs text-yellow-300">
+          <p class="font-medium mb-1">Paso siguiente: autorizar acceso</p>
+          <p class="text-yellow-500">Haz clic en el botón para abrir la URL de autorización. Copia el código y pégalo aquí.</p>
+        </div>
+        <div class="flex gap-3 items-start">
+          <button @click="startOAuth()" class="btn-secondary text-xs">🔗 Obtener URL de autorización</button>
+        </div>
+        <div x-show="oauthUrl" x-cloak class="space-y-3">
+          <div>
+            <p class="text-xs text-gray-400 mb-1">1. Abre esta URL en tu navegador:</p>
+            <a :href="oauthUrl" target="_blank" class="text-xs text-indigo-400 underline break-all" x-text="oauthUrl"></a>
+          </div>
+          <div>
+            <label class="label">2. Pega el código de autorización:</label>
+            <div class="flex gap-2">
+              <input x-model="oauthCode" type="text" class="input text-xs" placeholder="4/0AX..." />
+              <button @click="submitOAuthCode()" :disabled="!oauthCode" class="btn-primary text-xs">Conectar</button>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if google_connected %}
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-green-400">✓ Google Calendar conectado correctamente</span>
+          <button @click="disconnect('google')" class="btn-danger">Desconectar</button>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Service Account tab -->
+      <div x-show="tab==='service'" class="space-y-4">
+        <div class="bg-gray-800/50 rounded-lg p-4 text-xs text-gray-400 space-y-2">
+          <p class="font-medium text-gray-300">¿Cuándo usar Service Account?</p>
+          <p>Ideal para servidores. No requiere interacción del usuario. Necesitas compartir el calendario con el email de la cuenta de servicio.</p>
+          <ol class="list-decimal list-inside space-y-1.5 text-gray-500 mt-2">
+            <li>En Google Cloud Console → <strong class="text-gray-300">IAM → Cuentas de servicio → Crear</strong></li>
+            <li>Descarga la clave JSON</li>
+            <li>En Google Calendar → Configuración del calendario → <strong class="text-gray-300">Compartir con personas específicas</strong></li>
+            <li>Agrega el email de la cuenta de servicio con permiso <strong class="text-gray-300">Realizar cambios en eventos</strong></li>
+          </ol>
+        </div>
+        <div>
+          <label class="label">Subir archivo service_account.json</label>
+          <input type="file" accept=".json" @change="uploadCredentials($event, 'google_service')"
+                 class="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-700 file:text-white file:text-xs hover:file:bg-gray-600" />
+          {% if google_service_file %}
+          <p class="text-xs text-green-400 mt-1">✓ Archivo cargado</p>
+          {% endif %}
+        </div>
+        <div>
+          <label class="label">Email del usuario cuyo calendario gestionar <span class="text-gray-600">(delegación)</span></label>
+          <input type="text" class="input" placeholder="calendario@tudominio.com"
+                 x-model="serviceDelegate" />
+        </div>
+        <button @click="saveServiceAccount()" class="btn-primary">Guardar Service Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Outlook -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📧</span>
+        <div>
+          <h2 class="text-sm font-semibold text-white">Microsoft Outlook / 365</h2>
+          <p class="text-xs text-gray-500">Conecta via Microsoft Graph API (MSAL)</p>
+        </div>
+      </div>
+      <span class="{{ 'badge-green' if outlook_connected else 'badge-gray' }}">
+        {{ '✓ Conectado' if outlook_connected else '○ No conectado' }}
+      </span>
+    </div>
+
+    <div class="space-y-4">
+      <div class="bg-gray-800/50 rounded-lg p-4 text-xs text-gray-400 space-y-1.5">
+        <p class="font-medium text-gray-300">Configuración en Azure Portal</p>
+        <ol class="list-decimal list-inside space-y-1 text-gray-500">
+          <li>Ve a <a href="https://portal.azure.com" target="_blank" class="text-indigo-400 underline">portal.azure.com</a> → Azure Active Directory → Registros de aplicaciones</li>
+          <li>Nueva registración → copia el <strong class="text-gray-300">Application (client) ID</strong> y <strong class="text-gray-300">Directory (tenant) ID</strong></li>
+          <li>Certificados y secretos → Nuevo secreto de cliente</li>
+          <li>Permisos de API → Agregar <strong class="text-gray-300">Calendars.ReadWrite</strong> (Application)</li>
+        </ol>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="label">Client ID</label>
+          <input x-model="outlook.client_id" type="text" class="input font-mono text-xs" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        </div>
+        <div>
+          <label class="label">Tenant ID</label>
+          <input x-model="outlook.tenant_id" type="text" class="input font-mono text-xs" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        </div>
+        <div>
+          <label class="label">Client Secret</label>
+          <input x-model="outlook.client_secret" type="password" class="input" placeholder="••••••••" autocomplete="off" />
+        </div>
+        <div>
+          <label class="label">Email del usuario</label>
+          <input x-model="outlook.user_email" type="email" class="input" placeholder="agenda@empresa.com" />
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button @click="saveOutlook()" class="btn-primary">Guardar Outlook</button>
+        <button @click="testOutlook()" class="btn-secondary">🔌 Probar conexión</button>
+        <span x-show="outlookResult" x-cloak class="text-xs"
+              :class="outlookOk ? 'text-green-400' : 'text-red-400'"
+              x-text="outlookResult"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🔌</span>
+        <div>
+          <h2 class="text-sm font-semibold text-white">MCP Calendar Server</h2>
+          <p class="text-xs text-gray-500">Conecta cualquier servidor MCP que exponga herramientas de calendario</p>
+        </div>
+      </div>
+      <span class="{{ 'badge-green' if mcp_connected else 'badge-gray' }}">
+        {{ '✓ Configurado' if mcp_connected else '○ No configurado' }}
+      </span>
+    </div>
+
+    <div x-data="{ transport: 'http' }" class="space-y-4">
+      <div class="flex gap-1 bg-gray-800 p-1 rounded-lg w-fit">
+        <button @click="transport='http'"  :class="transport==='http'  ? 'bg-gray-700 text-white' : 'text-gray-400'" class="text-xs px-3 py-1.5 rounded-md">HTTP/SSE</button>
+        <button @click="transport='stdio'" :class="transport==='stdio' ? 'bg-gray-700 text-white' : 'text-gray-400'" class="text-xs px-3 py-1.5 rounded-md">Stdio (proceso)</button>
+      </div>
+
+      <div x-show="transport==='http'">
+        <label class="label">URL del servidor MCP</label>
+        <input x-model="mcp.server_url" type="text" class="input" placeholder="http://localhost:3000/mcp" />
+      </div>
+
+      <div x-show="transport==='stdio'" class="space-y-3">
+        <div>
+          <label class="label">Comando de inicio</label>
+          <input x-model="mcp.command" type="text" class="input font-mono text-xs"
+                 placeholder="npx -y @takisrs/google-calendar-mcp" />
+        </div>
+        <div>
+          <label class="label">Variables de entorno <span class="text-gray-600">(JSON)</span></label>
+          <textarea x-model="mcp.env" class="input font-mono text-xs" rows="3"
+                    placeholder='{"GOOGLE_CLIENT_ID": "...", "GOOGLE_REFRESH_TOKEN": "..."}'></textarea>
+        </div>
+      </div>
+
+      <button @click="saveMcp()" class="btn-primary">Guardar MCP</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function calendarsPage() {
+  return {
+    oauthUrl: '', oauthCode: '', serviceDelegate: '',
+    outlook: { client_id: '{{ outlook_config.client_id|default("") }}',
+               tenant_id: '{{ outlook_config.tenant_id|default("") }}',
+               client_secret: '', user_email: '{{ outlook_config.user_email|default("") }}' },
+    outlookResult: '', outlookOk: false,
+    mcp: { server_url: '{{ mcp_config.server_url|default("") }}', command: '', env: '{}' },
+
+    async uploadCredentials(event, type) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('type', type);
+      await fetch('/studio/calendars/upload', { method: 'POST', body: fd });
+      window.location.reload();
+    },
+
+    async startOAuth() {
+      const r = await fetch('/studio/calendars/google/oauth-url');
+      const d = await r.json();
+      this.oauthUrl = d.url;
+    },
+
+    async submitOAuthCode() {
+      await fetch('/studio/calendars/google/oauth-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: this.oauthCode }),
+      });
+      window.location.reload();
+    },
+
+    async saveServiceAccount() {
+      await fetch('/studio/calendars/google/service', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delegate: this.serviceDelegate }),
+      });
+      window.location.reload();
+    },
+
+    async disconnect(provider) {
+      await fetch(`/studio/calendars/${provider}/disconnect`, { method: 'POST' });
+      window.location.reload();
+    },
+
+    async saveOutlook() {
+      await fetch('/studio/calendars/outlook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.outlook),
+      });
+      window.location.reload();
+    },
+
+    async testOutlook() {
+      const r = await fetch('/studio/calendars/outlook/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.outlook),
+      });
+      const d = await r.json();
+      this.outlookOk = d.ok;
+      this.outlookResult = d.ok ? '✓ Conexión OK' : '✗ ' + d.error;
+    },
+
+    async saveMcp() {
+      await fetch('/studio/calendars/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.mcp),
+      });
+      window.location.reload();
+    },
+  }
+}
+</script>
+{% endblock %}
