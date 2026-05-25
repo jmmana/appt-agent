@@ -126,6 +126,13 @@ def create_studio_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/agent-status", tags=["Monitoring"])
+    async def agent_status(request: Request) -> dict[str, Any]:
+        agent = request.app.state.live_agent
+        if not agent:
+            return {"ready": False, "message": "Agente no configurado — configura el LLM en /studio/llm"}
+        return {"ready": True, "message": "Agente activo"}
+
     # Mount studio UI + calendar routes
     app.include_router(studio_router)
     app.include_router(cal_router)

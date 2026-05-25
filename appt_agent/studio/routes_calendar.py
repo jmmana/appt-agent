@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from appt_agent.studio.config_store import ConfigStore
-from appt_agent.studio.routes import _base_ctx, _TEMPLATES_DIR, _reload_agent
+from appt_agent.studio.routes import _base_ctx, _TEMPLATES_DIR, _reload_agent, _render
 
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 router = APIRouter(prefix="/studio/calendars")
@@ -76,7 +76,7 @@ async def calendars_page(request: Request) -> HTMLResponse:
         "mcp_config":          mcp_config,
         "mcp_connected":       mcp_connected,
     })
-    return templates.TemplateResponse("calendars.html", ctx)
+    return _render("calendars.html", ctx)
 
 
 # ─── Upload credentials file ──────────────────────────────────────────────────

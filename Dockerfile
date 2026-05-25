@@ -28,7 +28,7 @@ COPY --from=builder /build/dist/*.whl .
 # Install with common extras (users can override with build args)
 ARG EXTRAS="anthropic,openai,google,outlook,mistral,cohere,server"
 RUN pip install --no-cache-dir "appt_agent-0.1.0-py3-none-any.whl[$EXTRAS]" \
-    && pip install --no-cache-dir jinja2 python-multipart \
+    && pip install --no-cache-dir "jinja2>=3.1,<3.1.5" python-multipart \
     && rm *.whl
 
 # Data volume (SQLite files + credential files)

@@ -21,6 +21,16 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 router = APIRouter()
 
 
+def _render(name: str, ctx: dict[str, Any]):  # type: ignore[return]
+    """Starlette 0.41+ TemplateResponse adapter.
+    Old API: TemplateResponse(name, {"request": req, ...}) is broken in 0.41+.
+    New API: TemplateResponse(request=req, name=name, context={...}).
+    """
+    req = ctx.get("request")
+    context = {k: v for k, v in ctx.items() if k != "request"}
+    return templates.TemplateResponse(request=req, name=name, context=context)
+
+
 def _get_store(request: Request) -> ConfigStore:
     return request.app.state.config_store
 
@@ -60,7 +70,7 @@ async def dashboard(request: Request) -> HTMLResponse:
 
     ctx = _base_ctx(request, config, "dashboard")
     ctx["stats"] = stats
-    return templates.TemplateResponse("dashboard.html", ctx)
+    return _render("dashboard.html", ctx)
 
 
 # ─── LLM config ───────────────────────────────────────────────────────────────
@@ -70,7 +80,7 @@ async def llm_page(request: Request) -> HTMLResponse:
     store  = _get_store(request)
     config = await store.to_agent_config()
     ctx    = _base_ctx(request, config, "llm")
-    return templates.TemplateResponse("llm.html", ctx)
+    return _render("llm.html", ctx)
 
 
 @router.post("/studio/llm")
@@ -130,7 +140,7 @@ async def business_page(request: Request) -> HTMLResponse:
     store  = _get_store(request)
     config = await store.to_agent_config()
     ctx    = _base_ctx(request, config, "business")
-    return templates.TemplateResponse("business.html", ctx)
+    return _render("business.html", ctx)
 
 
 @router.post("/studio/business")
@@ -155,7 +165,7 @@ async def intents_page(request: Request) -> HTMLResponse:
     intents = await store.list_intents()
     ctx     = _base_ctx(request, config, "intents")
     ctx["intents"] = intents
-    return templates.TemplateResponse("intents.html", ctx)
+    return _render("intents.html", ctx)
 
 
 @router.post("/studio/intents")
@@ -204,7 +214,7 @@ async def chat_page(request: Request) -> HTMLResponse:
     store  = _get_store(request)
     config = await store.to_agent_config()
     ctx    = _base_ctx(request, config, "chat")
-    return templates.TemplateResponse("chat.html", ctx)
+    return _render("chat.html", ctx)
 
 
 @router.get("/test", response_class=HTMLResponse)
@@ -239,7 +249,7 @@ async def logs_page(request: Request) -> HTMLResponse:
     ctx = _base_ctx(request, config, "logs")
     ctx["stats"] = stats
     ctx["conversations"] = conversations
-    return templates.TemplateResponse("logs.html", ctx)
+    return _render("logs.html", ctx)
 
 
 # ─── Agent hot-reload ────────────────────────────────────────────────────────
