@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -84,14 +84,13 @@ async def llm_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/studio/llm")
-async def save_llm(
-    request: Request,
-    provider:   str = Form("anthropic"),
-    model:      str = Form(""),
-    api_key:    str = Form(""),
-    base_url:   str = Form(""),
-) -> RedirectResponse:
-    store = _get_store(request)
+async def save_llm(request: Request) -> JSONResponse:
+    body     = await request.json()
+    provider = body.get("provider", "anthropic")
+    model    = body.get("model", "")
+    api_key  = body.get("api_key", "")
+    base_url = body.get("base_url", "")
+    store    = _get_store(request)
     data: dict[str, str] = {"llm_provider": provider, "llm_base_url": base_url}
     if model:
         data["llm_model"] = model
@@ -100,7 +99,7 @@ async def save_llm(
     await store.set_many(data)
     # Reload agent with new config
     await _reload_agent(request)
-    return RedirectResponse("/studio/llm?saved=1", status_code=303)
+    return JSONResponse({"ok": True})
 
 
 @router.post("/studio/llm/test")

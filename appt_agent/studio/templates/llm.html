@@ -240,11 +240,20 @@ function llmConfig() {
 
     async save() {
       this.saving = true; this.saved = false;
-      const body = new FormData();
-      Object.entries(this.form).forEach(([k,v]) => body.append(k, v));
-      await fetch('/studio/llm', { method:'POST', body });
-      this.saving = false; this.saved = true;
-      setTimeout(() => this.saved = false, 4000);
+      try {
+        const r = await fetch('/studio/llm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.form),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        this.saved = true;
+        setTimeout(() => this.saved = false, 4000);
+      } catch(e) {
+        this.testOk = false;
+        this.testResult = '✗ No se pudo guardar: ' + e.message;
+      }
+      this.saving = false;
     },
 
     async testConn() {
