@@ -122,6 +122,10 @@ def create_studio_app(
         summary = await agent._tracker.get_token_summary(session_id)
         return summary.model_dump() if summary else {"error": "No data"}
 
+    @app.get("/health", tags=["Monitoring"])
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
     # Mount studio UI + calendar routes
     app.include_router(studio_router)
     app.include_router(cal_router)

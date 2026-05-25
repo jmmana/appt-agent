@@ -15,8 +15,8 @@ LABEL org.opencontainers.image.description="Conversational appointment booking a
 LABEL org.opencontainers.image.source="https://github.com/jmmana/appt-agent"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# Install curl for healthcheck + create non-root user
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+# Install curl + wget for healthcheck (Coolify uses wget) + create non-root user
+RUN apt-get update && apt-get install -y --no-install-recommends curl wget && \
     rm -rf /var/lib/apt/lists/* && \
     useradd -m -u 1000 appuser
 
@@ -43,7 +43,7 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["python", "-m", "appt_agent.studio"]
