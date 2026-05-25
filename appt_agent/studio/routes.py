@@ -131,7 +131,22 @@ async def test_llm(request: Request) -> JSONResponse:
         )
         return JSONResponse({"ok": True, "model": llm.model, "reply": resp.content[:50]})
     except Exception as exc:
-        return JSONResponse({"ok": False, "error": str(exc)})
+        # For HTTP errors, try to include the response body (real error from server)
+        error_msg = str(exc)
+        try:
+            import httpx as _httpx
+            if isinstance(exc, _httpx.HTTPStatusError):
+                body_text = exc.response.text
+                try:
+                    import json as _json
+                    body_data = _json.loads(body_text)
+                    body_detail = body_data.get("detail") or body_data.get("message") or body_text
+                except Exception:
+                    body_detail = body_text
+                error_msg = f"{exc.response.status_code} {exc.response.reason_phrase}: {body_detail}"
+        except Exception:
+            pass
+        return JSONResponse({"ok": False, "error": error_msg})
 
 
 # ─── Business config ──────────────────────────────────────────────────────────
