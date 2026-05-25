@@ -1,11 +1,13 @@
 """
 appt_agent.llm.meta_llm
 ~~~~~~~~~~~~~~~~~~~~~~~~
-Meta Llama via Ollama (local) — uses OpenAI-compatible API of Ollama.
+Meta Llama via Ollama — uses Ollama's OpenAI-compatible API.
 No extra pip install needed beyond httpx (already a core dep).
 
 Usage:
-    .with_llm("ollama", model="llama3.3", base_url="http://localhost:11434")
+    .with_llm("ollama", model="llama3.2", base_url="https://ollama.example.com")
+    .with_llm("ollama", model="llama3.2", base_url="https://ollama.example.com",
+              api_key="sk-xxx")   # if server uses OLLAMA_API_KEY auth
 """
 from __future__ import annotations
 
@@ -18,21 +20,32 @@ from appt_agent.models import LLMResponse, Message, Role
 @register_provider("ollama")
 @register_provider("meta")
 class OllamaLLM(AbstractLLM):
-    """Llama via Ollama — free, local, no cost estimate."""
+    """Llama via Ollama — free, local, no cost estimate.
+
+    Uses Ollama's OpenAI-compatible endpoint (/v1/chat/completions) which
+    works correctly through HTTPS reverse-proxies (avoids 405 on /api/chat).
+    If your Ollama server has auth enabled (OLLAMA_API_KEY env var), pass
+    api_key=<token> — it will be sent as 'Authorization: Bearer <token>'.
+    """
     provider = "ollama"
 
     def __init__(
         self,
-        model: str = "llama3.3",
+        model: str = "llama3.2",
         base_url: str = "http://localhost:11434",
-        api_key: str = "ollama",  # Ollama ignores it but httpx needs something
+        api_key: str = "",   # Optional: Bearer token for protected Ollama servers
         **kwargs: Any,
     ) -> None:
         import httpx
 
-        self.model    = model
+        self.model     = model
         self._base_url = base_url.rstrip("/")
-        self._client  = httpx.AsyncClient(base_url=self._base_url, timeout=120.0)
+        headers: dict[str, str] = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        self._client = httpx.AsyncClient(
+            base_url=self._base_url, timeout=120.0, headers=headers
+        )
 
     async def chat(
         self,
@@ -51,23 +64,26 @@ class OllamaLLM(AbstractLLM):
             if m.role in (Role.USER, Role.ASSISTANT)
         ]
 
+        # OpenAI-compatible endpoint — supported by Ollama ≥0.1.24
+        # Works through HTTPS proxies; avoids 405 that /api/chat can trigger.
         payload = {
-            "model":      self.model,
-            "messages":   oai_messages,
-            "stream":     False,
-            "options":    {"temperature": temperature, "num_predict": max_tokens},
+            "model":       self.model,
+            "messages":    oai_messages,
+            "stream":      False,
+            "temperature": temperature,
+            "max_tokens":  max_tokens,
         }
-        resp = await self._client.post("/api/chat", json=payload)
+        resp = await self._client.post("/v1/chat/completions", json=payload)
         resp.raise_for_status()
         data = resp.json()
 
-        content = data.get("message", {}).get("content", "")
-        # Ollama returns eval_count / prompt_eval_count
+        content = data["choices"][0]["message"]["content"]
+        usage   = data.get("usage", {})
         return LLMResponse(
             content=content,
-            input_tokens=data.get("prompt_eval_count", 0),
-            output_tokens=data.get("eval_count", 0),
-            model=self.model,
+            input_tokens=usage.get("prompt_tokens", 0),
+            output_tokens=usage.get("completion_tokens", 0),
+            model=data.get("model", self.model),
             provider=self.provider,
         )
 

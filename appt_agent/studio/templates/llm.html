@@ -58,12 +58,28 @@
         <p class="text-xs text-gray-600 mt-1" x-text="apiKeyHint"></p>
       </div>
 
-      <!-- Ollama base URL -->
-      <div x-show="form.provider === 'ollama'">
-        <label class="label">Base URL de Ollama</label>
-        <input x-model="form.base_url" type="text" class="input"
-               placeholder="http://localhost:11434" />
-        <p class="text-xs text-gray-600 mt-1">URL donde corre tu servidor Ollama.</p>
+      <!-- Ollama base URL + optional API key -->
+      <div x-show="form.provider === 'ollama'" class="space-y-3">
+        <div>
+          <label class="label">Base URL de Ollama</label>
+          <input x-model="form.base_url" type="text" class="input"
+                 placeholder="http://localhost:11434" />
+          <p class="text-xs text-gray-600 mt-1">
+            URL de tu servidor Ollama — local o remoto (ej: <code class="text-gray-500">https://ollama.miservidor.com</code>).
+          </p>
+        </div>
+        <div>
+          <label class="label">
+            API Key de Ollama
+            <span class="text-gray-600 font-normal ml-1">(opcional)</span>
+          </label>
+          <input x-model="form.api_key" type="password" class="input"
+                 placeholder="Solo si tu servidor usa OLLAMA_API_KEY" autocomplete="off" />
+          <p class="text-xs text-gray-600 mt-1">
+            Si tu Ollama tiene auth habilitada, pega aquí el token. Se envía como
+            <code class="text-gray-500">Authorization: Bearer &lt;token&gt;</code>.
+          </p>
+        </div>
       </div>
 
       <!-- Bedrock -->
@@ -108,7 +124,7 @@ const PROVIDER_DEFAULTS = {
   mistral:   { model: 'mistral-small-latest',       keyLabel: 'Mistral API Key',      hint: 'console.mistral.ai',    keyHint: '' },
   cohere:    { model: 'command-r-08-2024',          keyLabel: 'Cohere API Key',       hint: 'dashboard.cohere.com',  keyHint: '' },
   xai:       { model: 'grok-2-1212',               keyLabel: 'xAI API Key',          hint: 'console.x.ai',          keyHint: '' },
-  ollama:    { model: 'llama3.3',                   keyLabel: '',                     hint: '',                      keyHint: '' },
+  ollama:    { model: 'llama3.2',                   keyLabel: '',                     hint: 'ollama.com/library',    keyHint: '' },
   bedrock:   { model: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', keyLabel: '', hint: '', keyHint: '' },
 };
 
