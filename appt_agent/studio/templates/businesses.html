@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Negocios — appt-agent studio{% endblock %}
+{% block page_title %}Negocios{% endblock %}
+{% block page_subtitle %}Gestiona múltiples negocios en una sola instancia{% endblock %}
+
+{% block content %}
+<div style="max-width:42rem" x-data="bizManager()" x-init="init()">
+
+  <!-- Crear nuevo negocio -->
+  <div class="card" style="margin-bottom:1.25rem">
+    <p class="section-title">Nuevo negocio</p>
+    <div style="display:flex;gap:0.75rem;align-items:flex-end">
+      <div style="flex:1">
+        <label class="label">Nombre del negocio</label>
+        <input x-model="newName" type="text" class="input"
+               placeholder="Clínica San José, Taller Pérez…"
+               @keydown.enter="create()" />
+      </div>
+      <button @click="create()" :disabled="creating || !newName.trim()" class="btn-primary">
+        <span x-show="!creating">+ Crear</span>
+        <span x-show="creating" x-cloak>Creando…</span>
+      </button>
+    </div>
+    <p x-show="createError" x-cloak style="color:#f87171;font-size:0.8rem;margin-top:0.5rem" x-text="createError"></p>
+  </div>
+
+  <!-- Lista de negocios -->
+  <div class="card">
+    <p class="section-title">Negocios configurados</p>
+
+    {% if businesses %}
+    <div style="display:flex;flex-direction:column;gap:0.75rem">
+      {% for biz in businesses %}
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  padding:0.875rem 1rem;background:#111827;border:1px solid #1e293b;border-radius:0.625rem"
+           x-data="{ editing: false, name: '{{ biz.name|e }}' }">
+        <div style="flex:1;min-width:0">
+          <div x-show="!editing" style="display:flex;align-items:center;gap:0.625rem">
+            {% if biz.id == business_id %}
+            <span style="width:0.5rem;height:0.5rem;border-radius:50%;background:#6366f1;flex-shrink:0"></span>
+            {% else %}
+            <span style="width:0.5rem;height:0.5rem;border-radius:50%;background:#334155;flex-shrink:0"></span>
+            {% endif %}
+            <span style="font-weight:600;color:#f1f5f9;font-size:0.9rem">{{ biz.name }}</span>
+            <span style="font-family:monospace;font-size:0.7rem;color:#475569">{{ biz.id }}</span>
+            {% if biz.id == business_id %}
+            <span class="badge-green">activo</span>
+            {% endif %}
+          </div>
+          <div x-show="editing" x-cloak>
+            <input x-model="name" type="text" class="input" style="max-width:20rem"
+                   @keydown.enter="rename('{{ biz.id }}')" @keydown.escape="editing=false" />
+          </div>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-shrink:0">
+          <template x-if="!editing">
+            <div style="display:flex;gap:0.5rem">
+              <button @click="switchBiz('{{ biz.id }}')"
+                      class="btn-secondary" style="font-size:0.75rem;padding:0.3rem 0.65rem"
+                      {% if biz.id == business_id %}disabled{% endif %}>
+                {% if biz.id == business_id %}Activo{% else %}Ir →{% endif %}
+              </button>
+              <button @click="editing=true" class="btn-secondary"
+                      style="font-size:0.75rem;padding:0.3rem 0.65rem">✏️</button>
+              {% if biz.id != 'default' %}
+              <button @click="deleteBiz('{{ biz.id }}', '{{ biz.name|e }}')"
+                      class="btn-danger" style="font-size:0.75rem;padding:0.3rem 0.65rem">🗑️</button>
+              {% endif %}
+            </div>
+          </template>
+          <template x-if="editing">
+            <div style="display:flex;gap:0.5rem">
+              <button @click="rename('{{ biz.id }}')" class="btn-primary"
+                      style="font-size:0.75rem;padding:0.3rem 0.65rem">Guardar</button>
+              <button @click="editing=false;name='{{ biz.name|e }}'" class="btn-secondary"
+                      style="font-size:0.75rem;padding:0.3rem 0.65rem">Cancelar</button>
+            </div>
+          </template>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:#475569;font-size:0.875rem">No hay negocios configurados.</p>
+    {% endif %}
+  </div>
+
+  <!-- API usage info -->
+  <div class="card" style="margin-top:1.25rem;font-size:0.8rem;color:#64748b;line-height:1.8">
+    <p class="section-title">Usar en tu app</p>
+    <p>Pasa el <code style="background:#1e293b;padding:0.1rem 0.35rem;border-radius:0.25rem;color:#a5b4fc">business_id</code> al endpoint de chat:</p>
+    <pre style="background:#111827;border:1px solid #1e293b;border-radius:0.5rem;padding:1rem;
+                color:#94a3b8;overflow-x:auto;margin-top:0.5rem;font-size:0.78rem">POST /chat?b=<span style="color:#a5b4fc">{{ business_id }}</span>
+{
+  "session_id": "usuario-123",
+  "message": "Hola, quiero una cita"
+}</pre>
+    <p style="margin-top:0.75rem">O incluye el campo en el body (próximamente).</p>
+  </div>
+</div>
+
+<script>
+function bizManager() {
+  return {
+    newName: '', creating: false, createError: '',
+    init() {},
+    async create() {
+      this.createError = '';
+      if (!this.newName.trim()) return;
+      this.creating = true;
+      try {
+        const r  = await fetch('/studio/businesses?b={{ business_id }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: this.newName.trim() }),
+        });
+        const d  = await r.json();
+        if (d.ok) { switchBiz(d.business_id); }
+        else      { this.createError = d.error || 'Error creando negocio'; }
+      } catch(e) { this.createError = e.message; }
+      this.creating = false;
+    },
+    async rename(bid) {
+      await fetch(`/studio/businesses/${bid}?b={{ business_id }}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this.name }),
+      });
+      window.location.reload();
+    },
+    async deleteBiz(bid, name) {
+      if (!confirm(`¿Eliminar "${name}"? Se perderán su configuración e intenciones.`)) return;
+      const r = await fetch(`/studio/businesses/${bid}?b={{ business_id }}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.ok) { switchBiz('default'); }
+      else      { alert(d.error); }
+    },
+  }
+}
+</script>
+{% endblock %}

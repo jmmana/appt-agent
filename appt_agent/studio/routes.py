@@ -2,6 +2,7 @@
 appt_agent.studio.routes
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 Web UI routes for the studio panel (Jinja2 pages + config API endpoints).
+All studio pages are scoped to a business via ?b=<business_id>.
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from appt_agent.studio.config_store import ConfigStore
+from appt_agent.studio.config_store import ConfigStore, DEFAULT_BUSINESS_ID
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -21,11 +22,9 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 router = APIRouter()
 
 
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
 def _render(name: str, ctx: dict[str, Any]):  # type: ignore[return]
-    """Starlette 0.41+ TemplateResponse adapter.
-    Old API: TemplateResponse(name, {"request": req, ...}) is broken in 0.41+.
-    New API: TemplateResponse(request=req, name=name, context={...}).
-    """
     req = ctx.get("request")
     context = {k: v for k, v in ctx.items() if k != "request"}
     return templates.TemplateResponse(request=req, name=name, context=context)
@@ -35,21 +34,33 @@ def _get_store(request: Request) -> ConfigStore:
     return request.app.state.config_store
 
 
-def _get_agent(request: Request) -> Any:
-    return request.app.state.live_agent
+def _get_agent(request: Request, business_id: str) -> Any:
+    return request.app.state.agents.get(business_id)
+
+
+def _bid(request: Request) -> str:
+    """Extract business_id from query param ?b=, default to 'default'."""
+    return request.query_params.get("b", DEFAULT_BUSINESS_ID)
 
 
 def _agent_ready(config: dict[str, Any]) -> bool:
     return bool(config["llm"].get("api_key") or config["llm"]["provider"] == "ollama")
 
 
-def _base_ctx(request: Request, config: dict[str, Any], page: str) -> dict[str, Any]:
+async def _base_ctx(request: Request, business_id: str, page: str) -> dict[str, Any]:
+    store = _get_store(request)
+    config = await store.to_agent_config(business_id)
+    businesses = await store.list_businesses()
+    current_biz = await store.get_business(business_id) or {"id": business_id, "name": "?"}
     return {
-        "request":     request,
-        "active_page": page,
-        "config":      config,
-        "agent_ready": _agent_ready(config),
-        "flash":       None,
+        "request":            request,
+        "active_page":        page,
+        "config":             config,
+        "agent_ready":        _agent_ready(config),
+        "flash":              None,
+        "business_id":        business_id,
+        "current_business":   current_biz,
+        "businesses":         businesses,
     }
 
 
@@ -57,10 +68,10 @@ def _base_ctx(request: Request, config: dict[str, Any], page: str) -> dict[str, 
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request) -> HTMLResponse:
+    bid    = _bid(request)
     store  = _get_store(request)
-    config = await store.to_agent_config()
+    agent  = _get_agent(request, bid)
 
-    agent  = _get_agent(request)
     if agent and agent._tracker:
         stats = await agent._tracker.get_global_stats()
     else:
@@ -68,62 +79,99 @@ async def dashboard(request: Request) -> HTMLResponse:
                  "total_input_tokens": 0, "total_output_tokens": 0,
                  "total_cost_usd": 0.0, "total_messages": 0}
 
-    ctx = _base_ctx(request, config, "dashboard")
+    ctx = await _base_ctx(request, bid, "dashboard")
     ctx["stats"] = stats
     return _render("dashboard.html", ctx)
+
+
+# ─── Businesses CRUD ─────────────────────────────────────────────────────────
+
+@router.get("/studio/businesses", response_class=HTMLResponse)
+async def businesses_page(request: Request) -> HTMLResponse:
+    bid = _bid(request)
+    ctx = await _base_ctx(request, bid, "businesses")
+    return _render("businesses.html", ctx)
+
+
+@router.post("/studio/businesses")
+async def create_business(request: Request) -> JSONResponse:
+    body  = await request.json()
+    name  = (body.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"ok": False, "error": "Nombre requerido"}, status_code=400)
+    store = _get_store(request)
+    bid   = await store.create_business(name)
+    return JSONResponse({"ok": True, "business_id": bid})
+
+
+@router.patch("/studio/businesses/{business_id}")
+async def rename_business(business_id: str, request: Request) -> JSONResponse:
+    body  = await request.json()
+    name  = (body.get("name") or "").strip()
+    if not name:
+        return JSONResponse({"ok": False, "error": "Nombre requerido"}, status_code=400)
+    store = _get_store(request)
+    await store.rename_business(business_id, name)
+    await _reload_agent(request, business_id)
+    return JSONResponse({"ok": True})
+
+
+@router.delete("/studio/businesses/{business_id}")
+async def delete_business(business_id: str, request: Request) -> JSONResponse:
+    if business_id == DEFAULT_BUSINESS_ID:
+        return JSONResponse({"ok": False, "error": "No se puede eliminar el negocio por defecto"}, status_code=400)
+    store = _get_store(request)
+    await store.delete_business(business_id)
+    # Shutdown agent if running
+    agent = request.app.state.agents.pop(business_id, None)
+    if agent:
+        await agent.shutdown()
+    return JSONResponse({"ok": True})
 
 
 # ─── LLM config ───────────────────────────────────────────────────────────────
 
 @router.get("/studio/llm", response_class=HTMLResponse)
 async def llm_page(request: Request) -> HTMLResponse:
-    store  = _get_store(request)
-    config = await store.to_agent_config()
-    ctx    = _base_ctx(request, config, "llm")
+    bid = _bid(request)
+    ctx = await _base_ctx(request, bid, "llm")
     return _render("llm.html", ctx)
 
 
 @router.post("/studio/llm")
 async def save_llm(request: Request) -> JSONResponse:
+    bid      = _bid(request)
     body     = await request.json()
     provider = body.get("provider", "anthropic")
     model    = body.get("model", "")
     api_key  = body.get("api_key", "")
-    # Normalize base_url: strip whitespace + collapse double slashes after scheme
-    raw_url  = body.get("base_url", "").strip()
     import re as _re
-    base_url = _re.sub(r'(?<!:)/{2,}', '/', raw_url)  # fix //foo → /foo (not https://)
-    base_url = base_url.rstrip("/")
+    raw_url  = body.get("base_url", "").strip()
+    base_url = _re.sub(r'(?<!:)/{2,}', '/', raw_url).rstrip("/")
     store    = _get_store(request)
     data: dict[str, str] = {"llm_provider": provider, "llm_base_url": base_url, "llm_model": model}
     if api_key:
         data["llm_api_key"] = api_key
-    await store.set_many(data)
-    # Reload agent with new config
-    await _reload_agent(request)
+    await store.set_many(bid, data)
+    await _reload_agent(request, bid)
     return JSONResponse({"ok": True})
 
 
 @router.post("/studio/llm/test")
 async def test_llm(request: Request) -> JSONResponse:
-    body = await request.json()
+    body     = await request.json()
     provider = body.get("provider", "anthropic")
     model    = body.get("model", "")
     api_key  = body.get("api_key", "")
     base_url = body.get("base_url", "") or None
-
     try:
         from appt_agent.llm.base import get_provider
         cls = get_provider(provider)
         kwargs: dict[str, Any] = {}
-        if api_key:
-            kwargs["api_key"] = api_key
-        if base_url:
-            kwargs["base_url"] = base_url
-        if model:
-            kwargs["model"] = model
-
-        llm = cls(**kwargs)
+        if api_key:  kwargs["api_key"]  = api_key
+        if base_url: kwargs["base_url"] = base_url
+        if model:    kwargs["model"]    = model
+        llm  = cls(**kwargs)
         from appt_agent.models import Message, Role
         resp = await llm.chat(
             [Message(role=Role.USER, content="Say 'OK' in one word.")],
@@ -131,15 +179,14 @@ async def test_llm(request: Request) -> JSONResponse:
         )
         return JSONResponse({"ok": True, "model": llm.model, "reply": resp.content[:50]})
     except Exception as exc:
-        # For HTTP errors, try to include the response body (real error from server)
         error_msg = str(exc)
         try:
             import httpx as _httpx
             if isinstance(exc, _httpx.HTTPStatusError):
-                body_text = exc.response.text
+                body_text   = exc.response.text
                 try:
                     import json as _json
-                    body_data = _json.loads(body_text)
+                    body_data   = _json.loads(body_text)
                     body_detail = body_data.get("detail") or body_data.get("message") or body_text
                 except Exception:
                     body_detail = body_text
@@ -151,41 +198,31 @@ async def test_llm(request: Request) -> JSONResponse:
 
 @router.post("/studio/llm/models")
 async def list_models(request: Request) -> JSONResponse:
-    """List models available on an Ollama / Open WebUI server."""
     import httpx as _httpx
     import re as _re
     body     = await request.json()
     base_url = (body.get("base_url", "") or "").strip()
     api_key  = body.get("api_key", "") or ""
-
     if not base_url:
         return JSONResponse({"ok": False, "error": "base_url requerida"})
-
-    # Normalize double slashes and trailing slash
     base_url = _re.sub(r'(?<!:)/{2,}', '/', base_url).rstrip("/")
-
     headers: dict[str, str] = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-
-    # Try all known model-listing endpoints in priority order
-    # /ollama/api/tags bypasses Open WebUI's model registry (gets raw Ollama models)
     base = base_url.rstrip("/")
     endpoints = [
-        (base + "/ollama/api/tags",  "ollama"),   # Open WebUI → Ollama proxy (most reliable)
-        (base + "/api/models",       "openwebui"), # Open WebUI models endpoint
-        (base + "/api/tags",         "ollama"),    # bare Ollama at /api base
-        (base + "/models",           "openwebui"), # Open WebUI at /api base
-        (base + "/tags",             "ollama"),    # bare Ollama at root
+        (base + "/ollama/api/tags",  "ollama"),
+        (base + "/api/models",       "openwebui"),
+        (base + "/api/tags",         "ollama"),
+        (base + "/models",           "openwebui"),
+        (base + "/tags",             "ollama"),
     ]
-
     async with _httpx.AsyncClient(timeout=10.0, headers=headers) as client:
         for url, kind in endpoints:
             try:
                 r = await client.get(url)
                 if r.status_code == 200:
                     data = r.json()
-                    # Open WebUI returns {"data": [...]} ; Ollama returns {"models": [...]}
                     if kind == "openwebui" and "data" in data:
                         names = [m.get("id") or m.get("name") for m in data["data"]]
                     elif kind == "ollama" and "models" in data:
@@ -198,7 +235,6 @@ async def list_models(request: Request) -> JSONResponse:
                     return JSONResponse({"ok": False, "error": "401 Unauthorized — verifica el API key"})
             except Exception:
                 continue
-
     return JSONResponse({"ok": False, "error": "No se pudo listar modelos — verifica la URL"})
 
 
@@ -206,22 +242,25 @@ async def list_models(request: Request) -> JSONResponse:
 
 @router.get("/studio/business", response_class=HTMLResponse)
 async def business_page(request: Request) -> HTMLResponse:
-    store  = _get_store(request)
-    config = await store.to_agent_config()
-    ctx    = _base_ctx(request, config, "business")
+    bid = _bid(request)
+    ctx = await _base_ctx(request, bid, "business")
     return _render("business.html", ctx)
 
 
 @router.post("/studio/business")
 async def save_business(request: Request) -> JSONResponse:
-    body = await request.json()
+    bid   = _bid(request)
+    body  = await request.json()
     store = _get_store(request)
-    await store.set_many({
-        "business_name":      body.get("business_name", ""),
+    await store.set_many(bid, {
+        "business_name":        body.get("business_name", ""),
         "appointment_duration": str(body.get("appointment_duration", 30)),
-        "required_slots":     json.dumps(body.get("required_slots", ["name", "date", "time"])),
+        "required_slots":       json.dumps(body.get("required_slots", ["name", "date", "time"])),
     })
-    await _reload_agent(request)
+    # Also rename the business record
+    if name := body.get("business_name", "").strip():
+        await store.rename_business(bid, name)
+    await _reload_agent(request, bid)
     return JSONResponse({"ok": True})
 
 
@@ -229,34 +268,38 @@ async def save_business(request: Request) -> JSONResponse:
 
 @router.get("/studio/intents", response_class=HTMLResponse)
 async def intents_page(request: Request) -> HTMLResponse:
+    bid     = _bid(request)
     store   = _get_store(request)
-    config  = await store.to_agent_config()
-    intents = await store.list_intents()
-    ctx     = _base_ctx(request, config, "intents")
+    intents = await store.list_intents(bid)
+    ctx     = await _base_ctx(request, bid, "intents")
     ctx["intents"] = intents
     return _render("intents.html", ctx)
 
 
 @router.post("/studio/intents")
 async def create_intent(request: Request) -> JSONResponse:
+    bid   = _bid(request)
     body  = await request.json()
     store = _get_store(request)
     await store.upsert_intent(
+        business_id=bid,
         name=body["name"],
         description=body.get("description", ""),
         webhook=body.get("webhook") or None,
         webhook_secret=body.get("webhook_secret") or None,
         active=body.get("active", True),
     )
-    await _reload_agent(request)
+    await _reload_agent(request, bid)
     return JSONResponse({"ok": True})
 
 
 @router.post("/studio/intents/{intent_id}")
 async def update_intent(intent_id: int, request: Request) -> JSONResponse:
+    bid   = _bid(request)
     body  = await request.json()
     store = _get_store(request)
     await store.upsert_intent(
+        business_id=bid,
         name=body["name"],
         description=body.get("description", ""),
         webhook=body.get("webhook") or None,
@@ -264,15 +307,16 @@ async def update_intent(intent_id: int, request: Request) -> JSONResponse:
         active=body.get("active", True),
         intent_id=intent_id,
     )
-    await _reload_agent(request)
+    await _reload_agent(request, bid)
     return JSONResponse({"ok": True})
 
 
 @router.delete("/studio/intents/{intent_id}")
 async def delete_intent(intent_id: int, request: Request) -> JSONResponse:
+    bid   = _bid(request)
     store = _get_store(request)
-    await store.delete_intent(intent_id)
-    await _reload_agent(request)
+    await store.delete_intent(bid, intent_id)
+    await _reload_agent(request, bid)
     return JSONResponse({"ok": True})
 
 
@@ -280,31 +324,26 @@ async def delete_intent(intent_id: int, request: Request) -> JSONResponse:
 
 @router.get("/studio/chat", response_class=HTMLResponse)
 async def chat_page(request: Request) -> HTMLResponse:
-    store  = _get_store(request)
-    config = await store.to_agent_config()
-    ctx    = _base_ctx(request, config, "chat")
+    bid = _bid(request)
+    ctx = await _base_ctx(request, bid, "chat")
     return _render("chat.html", ctx)
 
 
 @router.get("/test", response_class=HTMLResponse)
 async def test_chat_page() -> HTMLResponse:
-    """Standalone test chat — network picker + chat UI, no sidebar.
-    Served as raw HTML (no Jinja2 processing needed — no template variables).
-    """
     html_path = _TEMPLATES_DIR / "test_chat.html"
     return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
-# ─── Logs ────────────────────────────────────────────────────────────────────
+# ─── Logs ─────────────────────────────────────────────────────────────────────
 
 @router.get("/studio/logs", response_class=HTMLResponse)
 async def logs_page(request: Request) -> HTMLResponse:
-    store  = _get_store(request)
-    config = await store.to_agent_config()
-    agent  = _get_agent(request)
+    bid   = _bid(request)
+    agent = _get_agent(request, bid)
 
-    stats = {"total_conversations": 0, "total_appointments": 0,
-             "total_input_tokens": 0, "total_output_tokens": 0, "total_cost_usd": 0.0}
+    stats: dict[str, Any] = {"total_conversations": 0, "total_appointments": 0,
+                              "total_input_tokens": 0, "total_output_tokens": 0, "total_cost_usd": 0.0}
     conversations: list[dict[str, Any]] = []
 
     if agent and agent._tracker:
@@ -315,18 +354,18 @@ async def logs_page(request: Request) -> HTMLResponse:
             rows = await cur.fetchall()
         conversations = [dict(r) for r in rows]
 
-    ctx = _base_ctx(request, config, "logs")
-    ctx["stats"] = stats
+    ctx = await _base_ctx(request, bid, "logs")
+    ctx["stats"]         = stats
     ctx["conversations"] = conversations
     return _render("logs.html", ctx)
 
 
-# ─── Agent hot-reload ────────────────────────────────────────────────────────
+# ─── Agent hot-reload (per business) ─────────────────────────────────────────
 
-async def _reload_agent(request: Request) -> None:
-    """Rebuild the BookingAgent from current stored config and attach to app.state."""
+async def _reload_agent(request: Request, business_id: str = DEFAULT_BUSINESS_ID) -> None:
+    """Rebuild the BookingAgent for the given business and store in app.state.agents."""
     store  = _get_store(request)
-    config = await store.to_agent_config()
+    config = await store.to_agent_config(business_id)
 
     if not config["llm"]["api_key"] and config["llm"]["provider"] != "ollama":
         return  # Can't build without credentials
@@ -337,15 +376,15 @@ async def _reload_agent(request: Request) -> None:
         from pathlib import Path
 
         llm_cfg  = config["llm"]
-        data_dir = Path(request.app.state.tokens_db).parent
+        data_dir = Path(request.app.state.data_dir)
 
         kwargs: dict[str, Any] = {}
-        if llm_cfg.get("api_key"):
-            kwargs["api_key"] = llm_cfg["api_key"]
-        if llm_cfg.get("base_url"):
-            kwargs["base_url"] = llm_cfg["base_url"]
-        if llm_cfg.get("model"):
-            kwargs["model"] = llm_cfg["model"]
+        if llm_cfg.get("api_key"):  kwargs["api_key"]  = llm_cfg["api_key"]
+        if llm_cfg.get("base_url"): kwargs["base_url"] = llm_cfg["base_url"]
+        if llm_cfg.get("model"):    kwargs["model"]    = llm_cfg["model"]
+
+        # Each business gets its own tokens DB
+        tokens_db = str(data_dir / f"{business_id}_tokens.db")
 
         builder = (
             BookingAgentBuilder()
@@ -353,16 +392,15 @@ async def _reload_agent(request: Request) -> None:
             .with_business_name(config["business_name"])
             .with_appointment_duration(config["appointment_duration"])
             .with_required_slots(config["required_slots"])
-            .with_token_tracking(request.app.state.tokens_db)
+            .with_token_tracking(tokens_db)
         )
 
-        # ── Attach saved calendar ──────────────────────────────────────────
+        # ── Calendars ──────────────────────────────────────────────
         token_file   = data_dir / "google_token.json"
         service_file = data_dir / "google_service_account.json"
         creds_file   = data_dir / "google_credentials.json"
 
         if token_file.exists() and creds_file.exists():
-            # Google OAuth2 already authorized
             try:
                 from appt_agent.calendars.google_cal import GoogleCalendar
                 builder.with_calendar_instance(
@@ -371,27 +409,26 @@ async def _reload_agent(request: Request) -> None:
                         token_path=str(token_file),
                     )
                 )
-            except Exception as _e:
+            except Exception:
                 pass
-
         elif service_file.exists():
             try:
                 from appt_agent.calendars.google_cal import GoogleCalendar
-                delegate = await store.get("google_service_delegate")
+                delegate = await store.get(business_id, "google_service_delegate")
                 builder.with_calendar_instance(
                     GoogleCalendar.from_service_account(
                         json_path=str(service_file),
                         delegate=delegate or None,
                     )
                 )
-            except Exception as _e:
+            except Exception:
                 pass
 
         # Outlook
-        oc_id  = await store.get("outlook_client_id")
-        oc_sec = await store.get("outlook_client_secret")
-        oc_tid = await store.get("outlook_tenant_id")
-        oc_em  = await store.get("outlook_user_email")
+        oc_id  = await store.get(business_id, "outlook_client_id")
+        oc_sec = await store.get(business_id, "outlook_client_secret")
+        oc_tid = await store.get(business_id, "outlook_tenant_id")
+        oc_em  = await store.get(business_id, "outlook_user_email")
         if oc_id and oc_sec and oc_tid and oc_em:
             try:
                 from appt_agent.calendars.outlook_cal import OutlookCalendar
@@ -399,16 +436,16 @@ async def _reload_agent(request: Request) -> None:
                     OutlookCalendar(client_id=oc_id, client_secret=oc_sec,
                                     tenant_id=oc_tid, user_email=oc_em)
                 )
-            except Exception as _e:
+            except Exception:
                 pass
 
         # MCP
-        mcp_url = await store.get("mcp_server_url")
-        mcp_cmd = await store.get("mcp_command")
+        mcp_url = await store.get(business_id, "mcp_server_url")
+        mcp_cmd = await store.get(business_id, "mcp_command")
         if mcp_url or mcp_cmd:
             try:
                 from appt_agent.calendars.mcp_cal import MCPCalendar
-                env_str = await store.get("mcp_env", "{}")
+                env_str = await store.get(business_id, "mcp_env", "{}")
                 mcp_env = json.loads(env_str) if env_str else {}
                 if mcp_url:
                     builder.with_calendar_instance(MCPCalendar(server_url=mcp_url))
@@ -416,9 +453,9 @@ async def _reload_agent(request: Request) -> None:
                     builder.with_calendar_instance(
                         MCPCalendar(command=mcp_cmd.split(), env=mcp_env)
                     )
-            except Exception as _e:
+            except Exception:
                 pass
-        # ──────────────────────────────────────────────────────────────────
+        # ──────────────────────────────────────────────────────────
 
         for intent in config["intents"]:
             builder.with_intent(Intent(
@@ -428,14 +465,16 @@ async def _reload_agent(request: Request) -> None:
                 webhook_secret=intent.get("webhook_secret"),
             ))
 
-        old_agent = request.app.state.live_agent
+        old_agent = request.app.state.agents.get(business_id)
         if old_agent:
             await old_agent.shutdown()
 
         new_agent = builder.build()
         await new_agent.startup()
-        request.app.state.live_agent = new_agent
+        request.app.state.agents[business_id] = new_agent
 
     except Exception as exc:
         import logging
-        logging.getLogger("appt_agent.studio").warning("Agent reload failed: %s", exc)
+        logging.getLogger("appt_agent.studio").warning(
+            "Agent reload failed for business %s: %s", business_id, exc
+        )
