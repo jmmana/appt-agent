@@ -32,14 +32,30 @@
 
       <!-- OAuth2 tab -->
       <div x-show="tab==='oauth'" class="space-y-4">
+
+        {% if flash_ok == 'google' %}
+        <div class="bg-green-900/30 border border-green-700/50 rounded-lg p-3 text-xs text-green-300">
+          ✓ Google Calendar conectado correctamente
+        </div>
+        {% endif %}
+        {% if flash_error %}
+        <div class="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-xs text-red-300">
+          ✗ {{ flash_error }}
+        </div>
+        {% endif %}
+
         <div class="bg-gray-800/50 rounded-lg p-4 text-xs text-gray-400 space-y-2">
-          <p class="font-medium text-gray-300">¿Cómo configurar OAuth2?</p>
+          <p class="font-medium text-gray-300">¿Cómo configurar OAuth2? (una sola vez)</p>
           <ol class="list-decimal list-inside space-y-1.5 text-gray-500">
-            <li>Ve a <a href="https://console.cloud.google.com" target="_blank" class="text-indigo-400 underline">console.cloud.google.com</a> y crea o selecciona un proyecto</li>
+            <li>Ve a <a href="https://console.cloud.google.com" target="_blank" class="text-indigo-400 underline">console.cloud.google.com</a> y crea un proyecto</li>
             <li>Habilita la <strong class="text-gray-300">Google Calendar API</strong></li>
-            <li>Ve a <strong class="text-gray-300">Credenciales → Crear credenciales → ID de cliente OAuth 2.0</strong></li>
-            <li>Tipo de aplicación: <strong class="text-gray-300">Aplicación de escritorio</strong></li>
-            <li>Descarga el JSON y súbelo aquí:</li>
+            <li>Credenciales → Crear credenciales → <strong class="text-gray-300">ID de cliente OAuth 2.0</strong></li>
+            <li>Tipo: <strong class="text-gray-300">Aplicación web</strong></li>
+            <li>En "URI de redireccionamiento autorizados" agrega exactamente:<br>
+              <code class="bg-gray-900 text-indigo-300 px-2 py-0.5 rounded mt-1 block break-all select-all">{{ callback_uri }}</code>
+            </li>
+            <li>OAuth consent screen → Test users → agrega tu correo</li>
+            <li>Descarga el JSON y súbelo aquí abajo</li>
           </ol>
         </div>
 
@@ -55,26 +71,13 @@
         </div>
 
         {% if google_oauth_file and not google_connected %}
-        <div class="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-3 text-xs text-yellow-300">
+        <div class="bg-indigo-900/20 border border-indigo-800/50 rounded-lg p-3 text-xs text-indigo-300">
           <p class="font-medium mb-1">Paso siguiente: autorizar acceso</p>
-          <p class="text-yellow-500">Haz clic en el botón para abrir la URL de autorización. Copia el código y pégalo aquí.</p>
+          <p class="text-indigo-400">Haz clic en "Conectar con Google" — te llevará a Google y volverás aquí automáticamente.</p>
         </div>
-        <div class="flex gap-3 items-start">
-          <button @click="startOAuth()" class="btn-secondary text-xs">🔗 Obtener URL de autorización</button>
-        </div>
-        <div x-show="oauthUrl" x-cloak class="space-y-3">
-          <div>
-            <p class="text-xs text-gray-400 mb-1">1. Abre esta URL en tu navegador:</p>
-            <a :href="oauthUrl" target="_blank" class="text-xs text-indigo-400 underline break-all" x-text="oauthUrl"></a>
-          </div>
-          <div>
-            <label class="label">2. Pega el código de autorización:</label>
-            <div class="flex gap-2">
-              <input x-model="oauthCode" type="text" class="input text-xs" placeholder="4/0AX..." />
-              <button @click="submitOAuthCode()" :disabled="!oauthCode" class="btn-primary text-xs">Conectar</button>
-            </div>
-          </div>
-        </div>
+        <a href="/studio/calendars/google/oauth-redirect?b={{ business_id }}" class="btn-primary inline-block text-xs">
+          🔗 Conectar con Google Calendar
+        </a>
         {% endif %}
 
         {% if google_connected %}

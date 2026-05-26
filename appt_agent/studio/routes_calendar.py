@@ -7,20 +7,23 @@ All routes read ?b=<business_id> via the shared _bid() helper.
 from __future__ import annotations
 
 import json
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from appt_agent.studio.config_store import ConfigStore
+from appt_agent.studio.config_store import ConfigStore, DEFAULT_BUSINESS_ID
 from appt_agent.studio.routes import (
     _base_ctx, _TEMPLATES_DIR, _reload_agent, _render, _bid
 )
 
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 router = APIRouter(prefix="/studio/calendars")
+
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
 def _store(request: Request) -> ConfigStore:
@@ -29,6 +32,19 @@ def _store(request: Request) -> ConfigStore:
 
 def _data_dir(request: Request) -> Path:
     return Path(request.app.state.data_dir)
+
+
+def _google_token_path(data_dir: Path, bid: str) -> Path:
+    """Return per-business token path; default business keeps the legacy filename."""
+    if bid == DEFAULT_BUSINESS_ID:
+        return data_dir / "google_token.json"
+    return data_dir / f"google_token_{bid}.json"
+
+
+def _callback_uri(request: Request) -> str:
+    """Build the absolute redirect URI for Google OAuth."""
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/studio/calendars/google/callback"
 
 
 # ─── Page ─────────────────────────────────────────────────────────────────────
@@ -40,10 +56,14 @@ async def calendars_page(request: Request) -> HTMLResponse:
     data_dir = _data_dir(request)
 
     google_oauth_file   = data_dir / "google_credentials.json"
-    google_token_file   = data_dir / "google_token.json"
+    google_token_file   = _google_token_path(data_dir, bid)
     google_service_file = data_dir / "google_service_account.json"
 
-    google_connected     = google_token_file.exists() or google_service_file.exists()
+    # Fall back to global token if per-business doesn't exist yet
+    if not google_token_file.exists():
+        google_token_file = data_dir / "google_token.json"
+
+    google_connected       = google_token_file.exists() or google_service_file.exists()
     google_oauth_file_name = google_oauth_file.name if google_oauth_file.exists() else None
 
     outlook_config = {
@@ -59,6 +79,10 @@ async def calendars_page(request: Request) -> HTMLResponse:
     }
     mcp_connected = bool(mcp_config["server_url"] or mcp_config["command"])
 
+    # Flash messages from OAuth redirect params
+    flash_ok    = request.query_params.get("connected")
+    flash_error = request.query_params.get("error")
+
     ctx = await _base_ctx(request, bid, "calendars")
     ctx.update({
         "google_connected":    google_connected,
@@ -68,6 +92,9 @@ async def calendars_page(request: Request) -> HTMLResponse:
         "outlook_connected":   outlook_connected,
         "mcp_config":          mcp_config,
         "mcp_connected":       mcp_connected,
+        "callback_uri":        _callback_uri(request),
+        "flash_ok":            flash_ok,
+        "flash_error":         flash_error,
     })
     return _render("calendars.html", ctx)
 
@@ -102,49 +129,108 @@ async def upload_credentials(
     return JSONResponse({"ok": True, "file": filename})
 
 
-# ─── Google OAuth2 flow ───────────────────────────────────────────────────────
+# ─── Google OAuth2 — web redirect flow ───────────────────────────────────────
+
+@router.get("/google/oauth-redirect")
+async def google_oauth_redirect(request: Request) -> RedirectResponse:
+    """Redirect the browser to Google's consent screen (no code-paste needed)."""
+    bid        = _bid(request)
+    data_dir   = _data_dir(request)
+    creds_path = data_dir / "google_credentials.json"
+
+    if not creds_path.exists():
+        return RedirectResponse(
+            f"/studio/calendars?b={bid}&error={urllib.parse.quote('Sube credentials.json primero')}"
+        )
+    try:
+        from google_auth_oauthlib.flow import Flow  # type: ignore[import]
+        redirect_uri = _callback_uri(request)
+        flow = Flow.from_client_secrets_file(str(creds_path), GOOGLE_SCOPES, redirect_uri=redirect_uri)
+        url, _ = flow.authorization_url(prompt="consent", access_type="offline", state=bid)
+
+        # Store flow per business for the callback to reuse
+        if not hasattr(request.app.state, "_google_flows"):
+            request.app.state._google_flows = {}
+        request.app.state._google_flows[bid] = flow
+
+        return RedirectResponse(url)
+    except ImportError:
+        return RedirectResponse(
+            f"/studio/calendars?b={bid}&error={urllib.parse.quote('Instala: pip install appt-agent[google]')}"
+        )
+    except Exception as exc:
+        return RedirectResponse(
+            f"/studio/calendars?b={bid}&error={urllib.parse.quote(str(exc))}"
+        )
+
+
+@router.get("/google/callback")
+async def google_oauth_callback(
+    request: Request,
+    code:  str | None = None,
+    state: str        = DEFAULT_BUSINESS_ID,
+    error: str | None = None,
+) -> RedirectResponse:
+    """Handle Google's redirect after user grants access."""
+    bid = state or DEFAULT_BUSINESS_ID
+
+    if error:
+        return RedirectResponse(
+            f"/studio/calendars?b={bid}&error={urllib.parse.quote(error)}"
+        )
+
+    data_dir   = _data_dir(request)
+    token_path = _google_token_path(data_dir, bid)
+
+    try:
+        from google_auth_oauthlib.flow import Flow  # type: ignore[import]
+        creds_path   = data_dir / "google_credentials.json"
+        redirect_uri = _callback_uri(request)
+
+        flows = getattr(request.app.state, "_google_flows", {})
+        flow  = flows.get(bid)
+        if not flow:
+            flow = Flow.from_client_secrets_file(str(creds_path), GOOGLE_SCOPES, redirect_uri=redirect_uri)
+
+        flow.fetch_token(code=code)
+        token_path.write_text(flow.credentials.to_json())
+
+        # Clean up stored flow
+        flows.pop(bid, None)
+
+        await _reload_agent(request, bid)
+        return RedirectResponse(f"/studio/calendars?b={bid}&connected=google")
+
+    except Exception as exc:
+        return RedirectResponse(
+            f"/studio/calendars?b={bid}&error={urllib.parse.quote(str(exc))}"
+        )
+
+
+# ─── Legacy: keep oauth-url endpoint for API consumers ───────────────────────
 
 @router.get("/google/oauth-url")
 async def google_oauth_url(request: Request) -> JSONResponse:
+    """Return the OAuth URL as JSON (for programmatic use). UI uses /oauth-redirect instead."""
+    bid        = _bid(request)
     data_dir   = _data_dir(request)
     creds_path = data_dir / "google_credentials.json"
     if not creds_path.exists():
         return JSONResponse({"error": "Sube credentials.json primero"}, status_code=400)
     try:
-        from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import]
-        SCOPES = ["https://www.googleapis.com/auth/calendar"]
-        flow   = InstalledAppFlow.from_client_secrets_file(str(creds_path), SCOPES)
-        flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-        url, _ = flow.authorization_url(prompt="consent", access_type="offline")
-        request.app.state._google_flow = flow
-        return JSONResponse({"url": url})
+        from google_auth_oauthlib.flow import Flow  # type: ignore[import]
+        redirect_uri = _callback_uri(request)
+        flow = Flow.from_client_secrets_file(str(creds_path), GOOGLE_SCOPES, redirect_uri=redirect_uri)
+        url, _ = flow.authorization_url(prompt="consent", access_type="offline", state=bid)
+        if not hasattr(request.app.state, "_google_flows"):
+            request.app.state._google_flows = {}
+        request.app.state._google_flows[bid] = flow
+        return JSONResponse({"url": url, "redirect_uri": redirect_uri})
     except ImportError:
         return JSONResponse({"error": "Instala: pip install appt-agent[google]"}, status_code=500)
 
 
-@router.post("/google/oauth-code")
-async def google_oauth_code(request: Request) -> JSONResponse:
-    bid        = _bid(request)
-    body       = await request.json()
-    code       = body.get("code", "").strip()
-    data_dir   = _data_dir(request)
-    token_path = data_dir / "google_token.json"
-    try:
-        flow = getattr(request.app.state, "_google_flow", None)
-        if not flow:
-            from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import]
-            creds_path = data_dir / "google_credentials.json"
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(creds_path), ["https://www.googleapis.com/auth/calendar"]
-            )
-            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-        flow.fetch_token(code=code)
-        token_path.write_text(flow.credentials.to_json())
-        await _reload_agent(request, bid)
-        return JSONResponse({"ok": True})
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
-
+# ─── Google Service Account ───────────────────────────────────────────────────
 
 @router.post("/google/service")
 async def google_service_delegate(request: Request) -> JSONResponse:
@@ -160,10 +246,14 @@ async def google_service_delegate(request: Request) -> JSONResponse:
 async def google_disconnect(request: Request) -> JSONResponse:
     bid      = _bid(request)
     data_dir = _data_dir(request)
-    for f in ["google_token.json", "google_service_account.json"]:
-        p = data_dir / f
-        if p.exists():
-            p.unlink()
+    # Remove both per-business and legacy global token
+    for f in [
+        _google_token_path(data_dir, bid),
+        data_dir / "google_token.json",
+        data_dir / "google_service_account.json",
+    ]:
+        if f.exists():
+            f.unlink()
     await _reload_agent(request, bid)
     return JSONResponse({"ok": True})
 

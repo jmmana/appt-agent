@@ -396,7 +396,9 @@ async def _reload_agent(request: Request, business_id: str = DEFAULT_BUSINESS_ID
         )
 
         # ── Calendars ──────────────────────────────────────────────
-        token_file   = data_dir / "google_token.json"
+        # Per-business token; fall back to global legacy file
+        _per_biz_token = data_dir / f"google_token_{business_id}.json"
+        token_file   = _per_biz_token if _per_biz_token.exists() else data_dir / "google_token.json"
         service_file = data_dir / "google_service_account.json"
         creds_file   = data_dir / "google_credentials.json"
 
