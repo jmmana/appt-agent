@@ -13,7 +13,7 @@
         <span class="text-2xl">📅</span>
         <div>
           <h2 class="text-sm font-semibold text-white">Google Calendar</h2>
-          <p class="text-xs text-gray-500">Conecta via OAuth2 o cuenta de servicio</p>
+          <p class="text-xs text-gray-500">Conecta tu calendario de Google para ver disponibilidad y crear citas</p>
         </div>
       </div>
       <span class="{{ 'badge-green' if google_connected else 'badge-gray' }}">
@@ -21,101 +21,100 @@
       </span>
     </div>
 
-    <!-- Tabs -->
-    <div x-data="{ tab: 'oauth' }" class="space-y-4">
-      <div class="flex gap-1 bg-gray-800 p-1 rounded-lg w-fit">
-        <button @click="tab='oauth'" :class="tab==='oauth' ? 'bg-gray-700 text-white' : 'text-gray-400'"
-                class="text-xs px-3 py-1.5 rounded-md transition-colors">OAuth2 (usuario)</button>
-        <button @click="tab='service'" :class="tab==='service' ? 'bg-gray-700 text-white' : 'text-gray-400'"
-                class="text-xs px-3 py-1.5 rounded-md transition-colors">Service Account (servidor)</button>
+    {% if flash_ok == 'google' %}
+    <div class="bg-green-900/30 border border-green-700/50 rounded-lg p-3 text-xs text-green-300 mb-4">
+      ✓ Google Calendar conectado correctamente
+    </div>
+    {% endif %}
+    {% if flash_error %}
+    <div class="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-xs text-red-300 mb-4">
+      ✗ {{ flash_error }}
+    </div>
+    {% endif %}
+
+    {# ── CONNECTED STATE ── #}
+    {% if google_connected %}
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 text-sm text-green-400">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+        Calendario conectado
+      </div>
+      <button @click="disconnect('google')" class="btn-danger text-xs">Desconectar</button>
+    </div>
+
+    {# ── NOT CONNECTED, CREDENTIALS READY ── #}
+    {% elif google_oauth_file %}
+    <div class="space-y-3">
+      <p class="text-sm text-gray-400">
+        Haz clic para autorizar acceso a tu Google Calendar. Serás redirigido a Google y volverás aquí automáticamente.
+      </p>
+      <a href="/studio/calendars/google/oauth-redirect?b={{ business_id }}"
+         class="btn-primary inline-flex items-center gap-2 text-sm">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Conectar con Google Calendar
+      </a>
+    </div>
+
+    {# ── NOT CONNECTED, NO CREDENTIALS — ADMIN SETUP NEEDED ── #}
+    {% else %}
+    <div x-data="{ showAdmin: false }" class="space-y-3">
+      <div class="bg-amber-900/20 border border-amber-800/50 rounded-lg p-3 text-xs text-amber-300">
+        <p class="font-medium">Configuración pendiente</p>
+        <p class="text-amber-400 mt-0.5">El administrador de la plataforma aún no ha subido las credenciales de Google. Una vez configurado, aparecerá aquí el botón para conectar tu calendario.</p>
       </div>
 
-      <!-- OAuth2 tab -->
-      <div x-show="tab==='oauth'" class="space-y-4">
-
-        {% if flash_ok == 'google' %}
-        <div class="bg-green-900/30 border border-green-700/50 rounded-lg p-3 text-xs text-green-300">
-          ✓ Google Calendar conectado correctamente
-        </div>
-        {% endif %}
-        {% if flash_error %}
-        <div class="bg-red-900/30 border border-red-700/50 rounded-lg p-3 text-xs text-red-300">
-          ✗ {{ flash_error }}
-        </div>
-        {% endif %}
-
+      <!-- Admin-only setup (collapsed) -->
+      <button @click="showAdmin=!showAdmin"
+              class="text-xs text-gray-600 hover:text-gray-400 flex items-center gap-1">
+        <span x-text="showAdmin ? '▼' : '▶'"></span> Configuración de administrador
+      </button>
+      <div x-show="showAdmin" x-cloak class="space-y-4 border-t border-gray-800 pt-4">
         <div class="bg-gray-800/50 rounded-lg p-4 text-xs text-gray-400 space-y-2">
-          <p class="font-medium text-gray-300">¿Cómo configurar OAuth2? (una sola vez)</p>
+          <p class="font-medium text-gray-300">Setup de administrador (una sola vez para toda la plataforma)</p>
           <ol class="list-decimal list-inside space-y-1.5 text-gray-500">
-            <li>Ve a <a href="https://console.cloud.google.com" target="_blank" class="text-indigo-400 underline">console.cloud.google.com</a> y crea un proyecto</li>
+            <li>Ve a <a href="https://console.cloud.google.com" target="_blank" class="text-indigo-400 underline">console.cloud.google.com</a> → crea un proyecto</li>
             <li>Habilita la <strong class="text-gray-300">Google Calendar API</strong></li>
-            <li>Credenciales → Crear credenciales → <strong class="text-gray-300">ID de cliente OAuth 2.0</strong></li>
+            <li>Credenciales → Crear → <strong class="text-gray-300">ID de cliente OAuth 2.0</strong></li>
             <li>Tipo: <strong class="text-gray-300">Aplicación web</strong></li>
-            <li>En "URI de redireccionamiento autorizados" agrega exactamente:<br>
+            <li>URI de redireccionamiento autorizado:<br>
               <code class="bg-gray-900 text-indigo-300 px-2 py-0.5 rounded mt-1 block break-all select-all">{{ callback_uri }}</code>
             </li>
-            <li>OAuth consent screen → Test users → agrega tu correo</li>
-            <li>Descarga el JSON y súbelo aquí abajo</li>
+            <li>OAuth consent screen → agrega tus usuarios de prueba</li>
+            <li>Descarga el JSON y súbelo aquí:</li>
           </ol>
         </div>
-
         <div>
-          <label class="label">Subir archivo credentials.json de Google</label>
-          <div class="mt-1 flex items-center gap-3">
-            <input type="file" accept=".json" @change="uploadCredentials($event, 'google_oauth')"
-                   class="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-700 file:text-white file:text-xs hover:file:bg-gray-600" />
+          <label class="label">Subir credentials.json (OAuth de la plataforma)</label>
+          <input type="file" accept=".json" @change="uploadCredentials($event, 'google_oauth')"
+                 class="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-700 file:text-white file:text-xs hover:file:bg-gray-600" />
+        </div>
+
+        <!-- Service Account alternative -->
+        <div class="border-t border-gray-800 pt-4">
+          <p class="text-xs font-medium text-gray-400 mb-3">Alternativa: Service Account (para calendarios compartidos)</p>
+          <div class="bg-gray-800/50 rounded-lg p-3 text-xs text-gray-500 space-y-1 mb-3">
+            <p>Ideal para un calendario de la empresa (no personal). El agente actúa con una cuenta de servicio.</p>
+            <ol class="list-decimal list-inside space-y-1 mt-1">
+              <li>Google Cloud Console → IAM → Cuentas de servicio → Crear</li>
+              <li>Descarga la clave JSON</li>
+              <li>En Google Calendar → Compartir → agrega el email de la cuenta de servicio</li>
+            </ol>
           </div>
-          {% if google_oauth_file %}
-          <p class="text-xs text-green-400 mt-1">✓ Archivo cargado: {{ google_oauth_file }}</p>
-          {% endif %}
-        </div>
-
-        {% if google_oauth_file and not google_connected %}
-        <div class="bg-indigo-900/20 border border-indigo-800/50 rounded-lg p-3 text-xs text-indigo-300">
-          <p class="font-medium mb-1">Paso siguiente: autorizar acceso</p>
-          <p class="text-indigo-400">Haz clic en "Conectar con Google" — te llevará a Google y volverás aquí automáticamente.</p>
-        </div>
-        <a href="/studio/calendars/google/oauth-redirect?b={{ business_id }}" class="btn-primary inline-block text-xs">
-          🔗 Conectar con Google Calendar
-        </a>
-        {% endif %}
-
-        {% if google_connected %}
-        <div class="flex items-center gap-3">
-          <span class="text-xs text-green-400">✓ Google Calendar conectado correctamente</span>
-          <button @click="disconnect('google')" class="btn-danger">Desconectar</button>
-        </div>
-        {% endif %}
-      </div>
-
-      <!-- Service Account tab -->
-      <div x-show="tab==='service'" class="space-y-4">
-        <div class="bg-gray-800/50 rounded-lg p-4 text-xs text-gray-400 space-y-2">
-          <p class="font-medium text-gray-300">¿Cuándo usar Service Account?</p>
-          <p>Ideal para servidores. No requiere interacción del usuario. Necesitas compartir el calendario con el email de la cuenta de servicio.</p>
-          <ol class="list-decimal list-inside space-y-1.5 text-gray-500 mt-2">
-            <li>En Google Cloud Console → <strong class="text-gray-300">IAM → Cuentas de servicio → Crear</strong></li>
-            <li>Descarga la clave JSON</li>
-            <li>En Google Calendar → Configuración del calendario → <strong class="text-gray-300">Compartir con personas específicas</strong></li>
-            <li>Agrega el email de la cuenta de servicio con permiso <strong class="text-gray-300">Realizar cambios en eventos</strong></li>
-          </ol>
-        </div>
-        <div>
-          <label class="label">Subir archivo service_account.json</label>
+          <label class="label">Subir service_account.json</label>
           <input type="file" accept=".json" @change="uploadCredentials($event, 'google_service')"
                  class="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-700 file:text-white file:text-xs hover:file:bg-gray-600" />
           {% if google_service_file %}
-          <p class="text-xs text-green-400 mt-1">✓ Archivo cargado</p>
+          <p class="text-xs text-green-400 mt-1">✓ Service account cargado</p>
+          <div class="mt-2">
+            <label class="label">Email del calendario a gestionar</label>
+            <input type="text" class="input" placeholder="agenda@empresa.com" x-model="serviceDelegate" />
+            <button @click="saveServiceAccount()" class="btn-primary mt-2">Guardar</button>
+          </div>
           {% endif %}
         </div>
-        <div>
-          <label class="label">Email del usuario cuyo calendario gestionar <span class="text-gray-600">(delegación)</span></label>
-          <input type="text" class="input" placeholder="calendario@tudominio.com"
-                 x-model="serviceDelegate" />
-        </div>
-        <button @click="saveServiceAccount()" class="btn-primary">Guardar Service Account</button>
       </div>
     </div>
+    {% endif %}
   </div>
 
   <!-- Outlook -->
