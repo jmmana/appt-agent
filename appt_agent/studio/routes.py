@@ -168,17 +168,16 @@ async def list_models(request: Request) -> JSONResponse:
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    # Try Open WebUI /api/models, then bare Ollama /api/tags
+    # Try all known model-listing endpoints in priority order
+    # /ollama/api/tags bypasses Open WebUI's model registry (gets raw Ollama models)
+    base = base_url.rstrip("/")
     endpoints = [
-        (base_url + "/models",   "openwebui"),
-        (base_url + "/tags",     "ollama"),
+        (base + "/ollama/api/tags",  "ollama"),   # Open WebUI → Ollama proxy (most reliable)
+        (base + "/api/models",       "openwebui"), # Open WebUI models endpoint
+        (base + "/api/tags",         "ollama"),    # bare Ollama at /api base
+        (base + "/models",           "openwebui"), # Open WebUI at /api base
+        (base + "/tags",             "ollama"),    # bare Ollama at root
     ]
-    # If base_url doesn't end with /api, also try adding /api
-    if not base_url.rstrip("/").endswith("/api"):
-        endpoints = [
-            (base_url + "/api/models", "openwebui"),
-            (base_url + "/api/tags",   "ollama"),
-        ] + endpoints
 
     async with _httpx.AsyncClient(timeout=10.0, headers=headers) as client:
         for url, kind in endpoints:

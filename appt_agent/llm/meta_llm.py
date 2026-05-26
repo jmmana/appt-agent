@@ -21,15 +21,17 @@ from appt_agent.llm.base import AbstractLLM, register_provider
 from appt_agent.models import LLMResponse, Message, Role
 
 # Paths tried in order (relative to base_url).
-# Covers all common Ollama / Open WebUI layouts regardless of how much
-# of the path the user included in base_url.
+# Covers Ollama, Open WebUI /api/ endpoint, and Open WebUI's Ollama proxy (/ollama/).
+# The /ollama/v1/ path bypasses Open WebUI's own model-routing code (which has a
+# NoneType bug in v0.9.5) and talks directly to the underlying Ollama instance.
 _CANDIDATE_PATHS = (
-    "v1/chat/completions",       # bare Ollama ≥0.1.24 at root
-    "api/v1/chat/completions",   # bare Ollama ≥0.1.24 at root (user omitted /api)
-    "chat/completions",          # Open WebUI when base_url ends with /api
-    "api/chat/completions",      # Open WebUI when base_url is the root domain
+    "v1/chat/completions",          # bare Ollama ≥0.1.24 at root
+    "ollama/v1/chat/completions",   # Open WebUI → Ollama proxy (bypasses OW routing bug)
+    "api/v1/chat/completions",      # bare Ollama at root, user included /api in base_url
+    "chat/completions",             # Open WebUI /api/chat/completions (base ends with /api)
+    "api/chat/completions",         # Open WebUI /api/chat/completions (base is root)
 )
-_RETRY_STATUSES  = {404, 405, 422}  # 400 may mean wrong model, not wrong path
+_RETRY_STATUSES = {400, 404, 405, 422}  # retry all — 400 from OW bug is also a path issue
 
 
 @register_provider("ollama")
